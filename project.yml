@@ -1,0 +1,30 @@
+name: Sub2Admin
+options:
+  bundleIdPrefix: com.nacer4.sub2admin
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "5.0"        # 语言模式 Swift 5（编译器可用 Xcode 16/26）
+    TARGETED_DEVICE_FAMILY: "1,2"
+    INFOPLIST_KEY_UIUserInterfaceStyle: Automatic
+targets:
+  Sub2Admin:
+    type: application
+    platform: iOS
+    sources:
+      - path: sub2api-admin
+    info:
+      path: sub2api-admin/Info.plist
+      properties:
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        # 自建 sub2api 服务可能部署在 http:// 内网地址
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: true
+        CFBundleDisplayName: Sub2Admin
+        CFBundleShortVersionString: "0.1.0"

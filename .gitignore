@@ -1,0 +1,15 @@
+# Xcode
+*.xcodeproj
+xcuserdata/
+DerivedData/
+*.xcworkspace
+
+# SwiftPM / XcodeGen
+.build/
+Package.resolved
+
+# macOS
+.DS_Store
+
+# 秘钥与本地配置
+*.env
