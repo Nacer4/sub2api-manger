@@ -57,6 +57,9 @@ struct AccountDetailView: View {
             LabeledRow("名称", account.name)
             LabeledRow("平台", account.platform)
             LabeledRow("认证类型", account.authType)
+            if let tier = account.tier, !tier.isEmpty {
+                LabeledRow("等级", tier)
+            }
             LabeledRow("状态", pill: account.status)
             LabeledRow("可调度", account.schedulable == nil ? "-" : (account.schedulable! ? "是" : "否"))
             LabeledRow("优先级", account.priority.map(String.init))

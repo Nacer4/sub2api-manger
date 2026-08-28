@@ -45,6 +45,7 @@ struct UsageLogsView: View {
 
     var body: some View {
         List {
+            timeWindowSection
             if viewModel.filter.isActive {
                 activeFilterBar
             }
@@ -84,6 +85,9 @@ struct UsageLogsView: View {
         .onChange(of: viewModel.searchText) { _, _ in
             viewModel.debouncedFilter()
         }
+        .onChange(of: viewModel.filter.timeWindow) { _, _ in
+            Task { await viewModel.reload() }
+        }
         .sheet(isPresented: $viewModel.showFilterSheet) {
             UsageFilterSheet(filter: viewModel.filter) { newFilter in
                 viewModel.applyFilter(newFilter)
@@ -95,6 +99,20 @@ struct UsageLogsView: View {
         }
         .overlay {
             if viewModel.isLoading, viewModel.logs.isEmpty { LoadingView() }
+        }
+    }
+
+    /// 快捷时间范围（与设计稿一致：全部 / 今天 / 近 7 天 / 近 30 天）
+    private var timeWindowSection: some View {
+        Section {
+            Picker("时间范围", selection: $viewModel.filter.timeWindow) {
+                ForEach(UsageFilter.TimeWindow.allCases) { window in
+                    Text(window.title).tag(window)
+                }
+            }
+            .pickerStyle(.segmented)
+            .listRowBackground(Color.clear)
+            .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
         }
     }
 
@@ -160,6 +178,7 @@ struct UsageLogRow: View {
             HStack {
                 if let latency = log.latencyMs {
                     Text(String(format: "%.0f ms", latency))
+                        .foregroundStyle(Fmt.latencyColor(log.latencyMs))
                 }
                 Spacer()
                 Text(Fmt.date(log.createdAt))
@@ -304,7 +323,7 @@ struct UsageFilterSheet: View {
                 } header: {
                     Text("日期范围")
                 } footer: {
-                    Text("按服务器本地时区的自然日过滤。")
+                    Text("设置自定义日期后将覆盖顶部快捷时间范围；按服务器本地时区的自然日过滤。")
                 }
             }
             .navigationTitle("筛选条件")
@@ -317,6 +336,10 @@ struct UsageFilterSheet: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("应用") {
+                        // 自定义日期与快捷时间范围互斥：设置了日期则清除快捷范围
+                        if filter.startDate != nil || filter.endDate != nil {
+                            filter.timeWindow = .all
+                        }
                         onApply(filter)
                         dismiss()
                     }
@@ -331,6 +354,7 @@ extension UsageFilter {
     /// 筛选摘要（用于激活筛选条展示）
     var summary: String {
         var parts: [String] = []
+        if timeWindow != .all { parts.append(timeWindow.title) }
         if !userId.isEmpty { parts.append("用户 \(userId)") }
         if !accountId.isEmpty { parts.append("账号 \(accountId)") }
         if !requestId.isEmpty { parts.append("请求 \(requestId.prefix(8))…") }
@@ -962,8 +986,14 @@ final class UsageLogsViewModel {
         if filter.stream != .all { extra["stream"] = filter.stream.rawValue }
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd"
-        if let start = filter.startDate { extra["start_date"] = formatter.string(from: start) }
-        if let end = filter.endDate { extra["end_date"] = formatter.string(from: end) }
+        // 快捷时间窗口优先；未选择时沿用自定义日期范围
+        if let quickStart = filter.timeWindow.rangeStart() {
+            extra["start_date"] = formatter.string(from: quickStart)
+            extra["end_date"] = formatter.string(from: .now)
+        } else {
+            if let start = filter.startDate { extra["start_date"] = formatter.string(from: start) }
+            if let end = filter.endDate { extra["end_date"] = formatter.string(from: end) }
+        }
         query.extra = extra
 
         do {

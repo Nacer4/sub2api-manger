@@ -44,6 +44,32 @@ struct UsageFilter: Equatable {
     var stream: StreamFilter = .all
     var startDate: Date?
     var endDate: Date?
+    /// 快捷时间范围（与设计稿一致：全部 / 今天 / 近 7 天 / 近 30 天）
+    var timeWindow: TimeWindow = .all
+
+    enum TimeWindow: String, CaseIterable, Identifiable {
+        case all = "", today = "today", last7 = "7d", last30 = "30d"
+        var id: String { rawValue }
+        var title: String {
+            switch self {
+            case .all: return "全部时间"
+            case .today: return "今天"
+            case .last7: return "近 7 天"
+            case .last30: return "近 30 天"
+            }
+        }
+
+        /// 快捷窗口覆盖的自然日起点（nil 表示不覆盖，沿用自定义日期）
+        func rangeStart(now: Date = .now, calendar: Calendar = .current) -> Date? {
+            let todayStart = calendar.startOfDay(for: now)
+            switch self {
+            case .all: return nil
+            case .today: return todayStart
+            case .last7: return todayStart.addingTimeInterval(-86400 * 6)
+            case .last30: return todayStart.addingTimeInterval(-86400 * 29)
+            }
+        }
+    }
 
     enum StreamFilter: String, CaseIterable, Identifiable {
         case all = "", yes = "true", no = "false"
@@ -59,7 +85,7 @@ struct UsageFilter: Equatable {
 
     var isActive: Bool {
         !userId.isEmpty || !accountId.isEmpty || !model.isEmpty || !requestId.isEmpty
-            || stream != .all || startDate != nil || endDate != nil
+            || stream != .all || startDate != nil || endDate != nil || timeWindow != .all
     }
 
     var queryItems: [URLQueryItem] {
@@ -71,8 +97,14 @@ struct UsageFilter: Equatable {
         if stream != .all { items.append(.init(name: "stream", value: stream.rawValue)) }
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd"
-        if let startDate { items.append(.init(name: "start_date", value: formatter.string(from: startDate))) }
-        if let endDate { items.append(.init(name: "end_date", value: formatter.string(from: endDate))) }
+        // 快捷时间窗口优先；未选择时沿用自定义日期范围
+        if let quickStart = timeWindow.rangeStart() {
+            items.append(.init(name: "start_date", value: formatter.string(from: quickStart)))
+            items.append(.init(name: "end_date", value: formatter.string(from: .now)))
+        } else {
+            if let startDate { items.append(.init(name: "start_date", value: formatter.string(from: startDate))) }
+            if let endDate { items.append(.init(name: "end_date", value: formatter.string(from: endDate))) }
+        }
         return items
     }
 }

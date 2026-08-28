@@ -6,6 +6,7 @@ struct Account: Decodable, Identifiable, Hashable {
     let name: String?
     let platform: String?      // claude / openai / gemini / antigravity / grok / ...
     let authType: String?      // oauth / api_key / ...
+    let tier: String?          // free / pro / max5 / max20 ...
     let status: String?        // active / error / rate_limited / expired ...
     var schedulable: Bool?
     let priority: Int?
@@ -19,7 +20,7 @@ struct Account: Decodable, Identifiable, Hashable {
     let errorMessage: String?
 
     enum CodingKeys: String, CodingKey {
-        case id, name, platform, status, priority, weight, email
+        case id, name, platform, status, priority, weight, email, tier
         case authType = "auth_type"
         case schedulable
         case proxyId = "proxy_id"

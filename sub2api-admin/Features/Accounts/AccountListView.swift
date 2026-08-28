@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// 上游账号列表：分页 + 平台/状态筛选 + 多选批量操作
+/// 上游账号列表：分页 + 平台/状态/等级/认证筛选 + 多选批量操作
 struct AccountListView: View {
     @State private var viewModel = AccountListViewModel()
 
@@ -120,6 +120,26 @@ struct AccountListView: View {
             .onChange(of: viewModel.statusFilter) { _, _ in
                 Task { await viewModel.reload() }
             }
+
+            Picker("等级", selection: $viewModel.tierFilter) {
+                Text("全部").tag("")
+                ForEach(viewModel.tiers, id: \.self) { tier in
+                    Text(tier).tag(tier)
+                }
+            }
+            .onChange(of: viewModel.tierFilter) { _, _ in
+                Task { await viewModel.reload() }
+            }
+
+            Picker("认证方式", selection: $viewModel.authFilter) {
+                Text("全部").tag("")
+                ForEach(viewModel.authTypes, id: \.self) { auth in
+                    Text(auth).tag(auth)
+                }
+            }
+            .onChange(of: viewModel.authFilter) { _, _ in
+                Task { await viewModel.reload() }
+            }
         }
     }
 
@@ -175,6 +195,10 @@ struct AccountRow: View {
                     .textCase(.uppercase)
                 if let authType = account.authType {
                     Text("· \(authType)")
+                }
+                if let tier = account.tier, !tier.isEmpty {
+                    Text("· \(tier)")
+                        .foregroundStyle(.tint)
                 }
                 if account.schedulable == false {
                     Text("· 不可调度")
@@ -294,6 +318,8 @@ final class AccountListViewModel {
     var searchText = ""
     var platformFilter = ""
     var statusFilter = ""
+    var tierFilter = ""
+    var authFilter = ""
 
     // 多选批量操作状态
     var isSelecting = false
@@ -305,6 +331,12 @@ final class AccountListViewModel {
 
     /// 常见上游平台（作为筛选项）
     let platforms = ["claude", "openai", "gemini", "antigravity", "grok", "kimi", "zhipu", "deepseek"]
+
+    /// 账号等级（与设计稿一致）
+    let tiers = ["free", "pro", "max5", "max20"]
+
+    /// 认证方式
+    let authTypes = ["oauth", "api_key"]
 
     private var query = PageQuery()
     private var reachedEnd = false
@@ -406,6 +438,8 @@ final class AccountListViewModel {
         var extra: [String: String] = [:]
         if !platformFilter.isEmpty { extra["platform"] = platformFilter }
         if !statusFilter.isEmpty { extra["status"] = statusFilter }
+        if !tierFilter.isEmpty { extra["tier"] = tierFilter }
+        if !authFilter.isEmpty { extra["auth_type"] = authFilter }
         if !searchText.isEmpty { extra["search"] = searchText }
         query.extra = extra
 
