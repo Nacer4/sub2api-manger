@@ -65,6 +65,7 @@ struct LoginView: View {
 
     // MARK: - 凭证
 
+    @ViewBuilder
     private var credentialSection: some View {
         Section {
             Picker("认证方式", selection: $viewModel.authMode) {
@@ -81,8 +82,15 @@ struct LoginView: View {
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                 SecureField("密码", text: $viewModel.password)
-                TextField("2FA 验证码（如已开启）", text: $viewModel.totp)
-                    .keyboardType(.numberPad)
+
+                // 开启 2FA 的账号：第一步登录后进入此步骤
+                if let masked = viewModel.pending2FAEmail {
+                    Text("账号 \(masked) 已开启两步验证，请输入 6 位验证码")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                    TextField("2FA 验证码", text: $viewModel.totp)
+                        .keyboardType(.numberPad)
+                }
             case .adminKey:
                 SecureField("admin- 开头的 API Key", text: $viewModel.adminKey)
                     .textInputAutocapitalization(.never)
@@ -93,6 +101,8 @@ struct LoginView: View {
         } footer: {
             if viewModel.authMode == .adminKey {
                 Text("Admin API Key 可在管理后台「系统设置 → Admin API Key」中生成。敏感操作（导出、备份等）仍需要 TOTP 二次验证。")
+            } else if viewModel.pending2FAEmail != nil {
+                Text("验证码来自你的身份验证器 App（TOTP）。")
             }
         }
     }
@@ -100,13 +110,21 @@ struct LoginView: View {
     private var loginButton: some View {
         Section {
             Button {
-                Task { await viewModel.login(appState) }
+                Task {
+                    if viewModel.pending2FAEmail != nil {
+                        await viewModel.submit2FA(appState)
+                    } else {
+                        await viewModel.login(appState)
+                    }
+                }
             } label: {
                 if viewModel.isLoggingIn {
                     HStack {
                         ProgressView().controlSize(.small)
                         Text("登录中…")
                     }
+                } else if viewModel.pending2FAEmail != nil {
+                    Text("验证并登录").frame(maxWidth: .infinity)
                 } else {
                     Text("登录").frame(maxWidth: .infinity)
                 }
@@ -114,6 +132,14 @@ struct LoginView: View {
             .disabled(!viewModel.canLogin || viewModel.isLoggingIn)
             .buttonStyle(.borderedProminent)
             .listRowBackground(Color.clear)
+
+            if viewModel.pending2FAEmail != nil {
+                Button("返回重新输入密码") {
+                    viewModel.cancel2FA()
+                }
+                .font(.footnote)
+                .listRowBackground(Color.clear)
+            }
         }
     }
 }
@@ -134,13 +160,19 @@ final class LoginViewModel {
     var showError = false
     var errorMessage = ""
 
+    /// 2FA 第一步返回的临时令牌与脱敏邮箱
+    var pending2FATempToken: String?
+    var pending2FAEmail: String?
+
     var showServerSheet = false
     var draftServer = ServerConfig.newPlaceholder()
 
     var canLogin: Bool {
         guard let server = selectedServer, !server.baseURL.isEmpty else { return false }
         switch authMode {
-        case .jwt: return !email.isEmpty && !password.isEmpty
+        case .jwt:
+            if pending2FAEmail != nil { return totp.count == 6 }
+            return !email.isEmpty && !password.isEmpty
         case .adminKey: return !adminKey.isEmpty
         }
     }
@@ -192,9 +224,17 @@ final class LoginViewModel {
                 server.authMode = .jwt
                 server.adminKey = ""
                 ServerStore.shared.upsert(server)
-                _ = try await APIClient.login(
-                    server: server, email: email, password: password, totp: totp
+                let outcome = try await APIClient.login(
+                    server: server, email: email, password: password
                 )
+                if case let .needs2FA(tempToken) = outcome {
+                    // 进入 2FA 第二步（脱敏邮箱由接口返回，此处显示占位）
+                    pending2FATempToken = tempToken
+                    if pending2FAEmail == nil {
+                        pending2FAEmail = MaskedEmail.mask(email) ?? email
+                    }
+                    return
+                }
             case .adminKey:
                 server.authMode = .adminKey
                 server.adminKey = adminKey
@@ -208,5 +248,38 @@ final class LoginViewModel {
             errorMessage = error.localizedDescription
             showError = true
         }
+    }
+
+    /// 2FA 第二步
+    func submit2FA(_ appState: AppState) async {
+        guard let server = selectedServer,
+              let tempToken = pending2FATempToken else { return }
+        isLoggingIn = true
+        defer { isLoggingIn = false }
+
+        do {
+            try await APIClient.login2FA(server: server, tempToken: tempToken, totpCode: totp)
+            appState.switchServer(server)
+        } catch {
+            errorMessage = error.localizedDescription
+            showError = true
+        }
+    }
+
+    func cancel2FA() {
+        pending2FATempToken = nil
+        pending2FAEmail = nil
+        totp = ""
+    }
+}
+
+/// 邮箱脱敏（2FA 第二步前本地显示用）
+enum MaskedEmail {
+    static func mask(_ email: String) -> String? {
+        guard let at = email.firstIndex(of: "@"), at != email.startIndex else { return nil }
+        let name = String(email[email.startIndex..<at])
+        let domain = String(email[at...])
+        guard name.count > 2 else { return name + "***" + domain }
+        return String(name.prefix(2)) + "***" + domain
     }
 }
