@@ -78,10 +78,12 @@ struct AccountListView: View {
             if let action = viewModel.pendingBatchAction {
                 BatchConfirmSheet(
                     action: action,
-                    count: viewModel.selectedIds.count
-                ) {
-                    Task { await viewModel.runBatch(action) }
-                }
+                    count: viewModel.selectedIds.count,
+                    previewNames: viewModel.selectedPreviewNames,
+                    onConfirm: {
+                        Task { await viewModel.runBatch(action) }
+                    }
+                )
             }
         }
         .alert("批量操作", isPresented: $viewModel.showBatchResult) {
@@ -198,57 +200,79 @@ struct AccountRow: View {
     }
 }
 
-/// 批量操作确认弹窗（删除类操作红色确认）
+/// 批量操作确认弹窗（删除类操作红色确认 + 选中账号预览）
 struct BatchConfirmSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var isRunning = false
 
     let action: AccountBatchAction
     let count: Int
+    let previewNames: [String]
     let onConfirm: () async -> Void
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 20) {
-                Image(systemName: action.symbol)
-                    .font(.system(size: 44))
-                    .foregroundStyle(action.isDestructive ? .red : .tint)
-
-                Text(action.title)
-                    .font(.title3.weight(.semibold))
-
-                Text("将对 \(count) 个账号执行「\(action.title)」。")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-
-                if action.isDestructive {
-                    Text("该操作不可恢复。")
-                        .font(.footnote)
-                        .foregroundStyle(.red)
-                }
-
-                Button {
-                    Task {
-                        isRunning = true
-                        await onConfirm()
-                        isRunning = false
-                        dismiss()
+            List {
+                Section {
+                    HStack {
+                        Image(systemName: action.symbol)
+                            .font(.title2)
+                            .foregroundStyle(action.isDestructive ? .red : .tint)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(action.title)
+                                .font(.headline)
+                            Text("将对 \(count) 个账号执行该操作。")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
                     }
-                } label: {
-                    if isRunning {
-                        HStack { ProgressView().controlSize(.small); Text("执行中…") }
-                    } else {
-                        Text("确认执行")
+                    if action.isDestructive {
+                        Label("该操作不可恢复。", systemImage: "exclamationmark.triangle.fill")
+                            .font(.footnote)
+                            .foregroundStyle(.red)
                     }
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(action.isDestructive ? .red : .accentColor)
-                .disabled(isRunning)
 
-                Spacer()
+                if !previewNames.isEmpty {
+                    Section("选中账号（前 \(previewNames.count) 项）") {
+                        ForEach(previewNames, id: \.self) { name in
+                            Text(name)
+                                .font(.subheadline)
+                                .lineLimit(1)
+                        }
+                        if count > previewNames.count {
+                            Text("…及其他 \(count - previewNames.count) 个")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+
+                Section {
+                    Button {
+                        Task {
+                            isRunning = true
+                            await onConfirm()
+                            isRunning = false
+                            dismiss()
+                        }
+                    } label: {
+                        if isRunning {
+                            HStack {
+                                ProgressView()
+                                Text("执行中…")
+                            }
+                        } else {
+                            Text("确认执行")
+                                .frame(maxWidth: .infinity)
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(action.isDestructive ? .red : .accentColor)
+                    .listRowBackground(Color.clear)
+                    .disabled(isRunning)
+                }
             }
-            .padding(24)
             .navigationTitle("确认")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -257,7 +281,7 @@ struct BatchConfirmSheet: View {
                 }
             }
         }
-        .presentationDetents([.medium])
+        .presentationDetents([.medium, .large])
     }
 }
 
@@ -318,6 +342,14 @@ final class AccountListViewModel {
         for account in accounts where !selectedIds.contains(account.id) {
             selectedIds.insert(account.id)
         }
+    }
+
+    /// 确认弹窗中的选中账号预览（当前页已加载的前 5 个名称）
+    var selectedPreviewNames: [String] {
+        accounts
+            .filter { selectedIds.contains($0.id) }
+            .prefix(5)
+            .map { $0.name ?? "账号 #\($0.id)" }
     }
 
     // MARK: - 批量操作

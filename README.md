@@ -104,12 +104,12 @@ sub2api-manger/
 - 4.3 运维操作（确认后执行，完成后自动刷新状态）：
   - 测试可用性 / 刷新凭证 / 清除错误状态 / 清除限流状态 / 重置配额 / 恢复状态 / 刷新账号等级
 - 4.4 调度开关（Toggle，即时生效）
-- 4.5 批量操作（多选模式，请求体 `{account_ids: [...]}`，对照后端 `batch_handler.go`）：
+- 4.5 批量操作（多选模式，请求体 `{account_ids: [...]}`，对照后端 `account_handler.go`）：
   - 批量刷新凭证 `POST /admin/accounts/batch-refresh`
   - 批量清除错误状态 `POST /admin/accounts/batch-clear-error`
   - 批量刷新账号等级 `POST /admin/accounts/batch-refresh-tier`
-  - 批量删除（二次确认，仅删除已选中的非选中态保留）`POST /admin/accounts/batch-delete`
-  - 执行结果反馈 + 完成后自动重载列表
+  - 批量删除（红色警告 + 选中账号预览）`POST /admin/accounts/batch-delete`
+  - 确认弹窗展示选中账号名称预览（前 5 项 + 溢出计数）；执行中禁用；完成后自动重载列表
 
 ### 5. 日志（Logs）
 
@@ -119,12 +119,22 @@ sub2api-manger/
   - 流式/非流式/全部
   - 日期范围（start_date/end_date，服务器本地时区自然日）
   - 列表顶部激活筛选条件条，一键清除
-- 5.3 错误请求列表（`/admin/ops/request-errors`）：已解决/未解决图标、HTTP 状态码、错误信息、关联用户与账号
-- 5.4 错误请求详情（`/admin/ops/request-errors/:id`）：
-  - 错误信息：类型/阶段/HTTP 状态/严重程度/错误归属/错误来源/错误消息（可选中文本）
-  - 请求上下文：Request ID/模型/平台/用户/账号/分组/客户端 IP/发生与解决时间/处理人
+- 5.3 使用记录详情钻取：Token 明细（输入/输出/缓存写入/缓存读取/合计）、计费（费用/总延迟）、关联 ID（用户/账号/API Key）、Request ID 可选中复制
+- 5.4 错误请求列表（`/admin/ops/request-errors`）：已解决/未解决图标、HTTP 状态码、错误信息、关联用户与账号
+- 5.5 错误请求多条件筛选（Sheet，参数对照 `ops_handler.go` ListRequestErrors）：
+  - 时间窗口（1h/24h/7d/30d，`start_time` RFC3339；后端默认仅 1h，App 显式传参放大）
+  - 解决状态（全部/未解决/已解决）
+  - 平台 / 模型（精确匹配）/ 账号 ID
+  - 搜索框 → `q`（消息/请求 ID 检索，防抖）
+  - 激活筛选条件条，一键清除
+- 5.6 错误请求详情（`GET /admin/ops/request-errors/:id`，详情端点含列表没有的字段）：
+  - 错误信息：类型/阶段/HTTP 状态/严重程度/错误归属/错误来源/错误消息/错误响应体（error_body）/业务限流标记
+  - 请求上下文：Request ID/请求模型/计费模型/上游模型/平台/请求路径/流式/用户/API Key（名称+前缀）/账号/分组/客户端 IP/User-Agent/发生与解决时间/处理人
+  - 延迟分解：认证/路由/上游/响应/首字（TTFT）各阶段毫秒值
+  - 上游上下文：上游 HTTP 状态/上游错误消息/错误详情
   - 处理状态：未解决可「标记为已解决」（`PUT .../resolve`），成功后列表自动刷新
-  - 关联上游错误钻取（`GET .../upstream-errors`，失败时静默隐藏）：账号/HTTP 状态/错误消息/错误码/延迟/时间
+  - 关联使用记录钻取：按 Request ID 跳转使用记录并自动应用筛选
+  - 关联上游错误列表（`GET .../upstream-errors`，失败时静默隐藏）：账号/HTTP 状态/错误消息/错误码/延迟/时间
 
 ### 6. 设置（Settings）
 
