@@ -68,6 +68,37 @@ enum AccountAction: String, CaseIterable, Identifiable {
     }
 }
 
+/// 账号批量操作（POST /admin/accounts/batch-*；请求体统一 {account_ids: [...]}，
+/// 源码 account_handler.go BatchDelete/BatchRefresh/BatchClearError/BatchRefreshTier 验证）
+enum AccountBatchAction: String, CaseIterable, Identifiable {
+    case batchRefresh = "batch-refresh"
+    case batchClearError = "batch-clear-error"
+    case batchRefreshTier = "batch-refresh-tier"
+    case batchDelete = "batch-delete"
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .batchRefresh: return "批量刷新凭证"
+        case .batchClearError: return "批量清除错误"
+        case .batchRefreshTier: return "批量刷新等级"
+        case .batchDelete: return "批量删除"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .batchRefresh: return "arrow.clockwise.circle"
+        case .batchClearError: return "xmark.bubble.circle"
+        case .batchRefreshTier: return "sparkles"
+        case .batchDelete: return "trash.circle"
+        }
+    }
+
+    var isDestructive: Bool { self == .batchDelete }
+}
+
 /// 账号当日统计
 struct AccountTodayStats: Decodable, Hashable {
     let requests: Int?

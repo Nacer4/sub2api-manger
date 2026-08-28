@@ -1,47 +1,97 @@
 import SwiftUI
 
-/// 上游账号列表：分页 + 平台/状态筛选
+/// 上游账号列表：分页 + 平台/状态筛选 + 多选批量操作
 struct AccountListView: View {
     @State private var viewModel = AccountListViewModel()
 
     var body: some View {
-        NavigationStack {
-            List {
-                filterSection
-                if let error = viewModel.error, viewModel.accounts.isEmpty {
-                    ErrorStateView(error: error) {
-                        Task { await viewModel.reload() }
-                    }
-                    .listRowSeparator(.hidden)
-                } else if viewModel.accounts.isEmpty, !viewModel.isLoading {
-                    EmptyStateView(text: "暂无账号")
-                } else {
-                    ForEach(viewModel.accounts) { account in
+        List {
+            if viewModel.isSelecting {
+                selectionSection
+            }
+            filterSection
+            if let error = viewModel.error, viewModel.accounts.isEmpty {
+                ErrorStateView(error: error) {
+                    Task { await viewModel.reload() }
+                }
+                .listRowSeparator(.hidden)
+            } else if viewModel.accounts.isEmpty, !viewModel.isLoading {
+                EmptyStateView(text: "暂无账号")
+            } else {
+                ForEach(viewModel.accounts) { account in
+                    if viewModel.isSelecting {
+                        Button {
+                            viewModel.toggleSelection(account)
+                        } label: {
+                            HStack {
+                                Image(systemName: viewModel.isSelected(account)
+                                      ? "checkmark.circle.fill" : "circle")
+                                    .foregroundStyle(viewModel.isSelected(account) ? .tint : .secondary)
+                                AccountRow(account: account)
+                            }
+                        }
+                        .tint(.primary)
+                    } else {
                         NavigationLink(value: account) {
                             AccountRow(account: account)
                         }
                     }
-                    LoadMoreFooter(
-                        isLoading: viewModel.isLoading,
-                        action: { Task { await viewModel.loadMore() } }
-                    )
-                    .listRowSeparator(.hidden)
+                }
+                LoadMoreFooter(
+                    isLoading: viewModel.isLoading,
+                    action: { Task { await viewModel.loadMore() } }
+                )
+                .listRowSeparator(.hidden)
+            }
+        }
+        .navigationTitle("账号池")
+        .searchable(text: $viewModel.searchText, prompt: "搜索账号名称")
+        .onChange(of: viewModel.searchText) { _, _ in
+            viewModel.debouncedSearch()
+        }
+        .navigationDestination(for: Account.self) { account in
+            AccountDetailView(accountId: account.id)
+        }
+        .refreshable { await viewModel.reload() }
+        .task { await viewModel.reloadIfNeeded() }
+        .toolbar {
+            if viewModel.isSelecting {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("取消") { viewModel.exitSelection() }
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Text("已选 \(viewModel.selectedIds.count)")
+                        .font(.subheadline.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
+            } else {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        viewModel.enterSelection()
+                    } label: {
+                        Label("选择", systemImage: "checkmark.circle")
+                    }
                 }
             }
-            .navigationTitle("账号池")
-            .searchable(text: $viewModel.searchText, prompt: "搜索账号名称")
-            .onChange(of: viewModel.searchText) { _, _ in
-                viewModel.debouncedSearch()
-            }
-            .navigationDestination(for: Account.self) { account in
-                AccountDetailView(accountId: account.id)
-            }
-            .refreshable { await viewModel.reload() }
-            .task { await viewModel.reloadIfNeeded() }
-            .overlay {
-                if viewModel.isLoading, viewModel.accounts.isEmpty {
-                    LoadingView()
+        }
+        .sheet(isPresented: $viewModel.showBatchSheet) {
+            if let action = viewModel.pendingBatchAction {
+                BatchConfirmSheet(
+                    action: action,
+                    count: viewModel.selectedIds.count
+                ) {
+                    Task { await viewModel.runBatch(action) }
                 }
+            }
+        }
+        .alert("批量操作", isPresented: $viewModel.showBatchResult) {
+            Button("好", role: .cancel) {}
+        } message: {
+            Text(viewModel.batchResultMessage)
+        }
+        .overlay {
+            if viewModel.isLoading, viewModel.accounts.isEmpty {
+                LoadingView()
             }
         }
     }
@@ -68,6 +118,39 @@ struct AccountListView: View {
             .onChange(of: viewModel.statusFilter) { _, _ in
                 Task { await viewModel.reload() }
             }
+        }
+    }
+
+    private var selectionSection: some View {
+        Section {
+            ForEach(AccountBatchAction.allCases) { action in
+                Button {
+                    viewModel.pendingBatchAction = action
+                    viewModel.showBatchSheet = true
+                } label: {
+                    Label(action.title, systemImage: action.symbol)
+                        .foregroundStyle(action.isDestructive ? .red : .primary)
+                }
+                .disabled(viewModel.selectedIds.isEmpty)
+            }
+
+            Button {
+                viewModel.selectAll()
+            } label: {
+                Label("全选当前页", systemImage: "checkmark.circle.2")
+            }
+            .disabled(viewModel.accounts.isEmpty)
+
+            Button(role: .destructive) {
+                viewModel.selectedIds.removeAll()
+            } label: {
+                Label("清空选择", systemImage: "eraser")
+            }
+            .disabled(viewModel.selectedIds.isEmpty)
+        } header: {
+            Text("批量操作")
+        } footer: {
+            Text("勾选账号后执行。批量删除不可恢复。")
         }
     }
 }
@@ -115,6 +198,69 @@ struct AccountRow: View {
     }
 }
 
+/// 批量操作确认弹窗（删除类操作红色确认）
+struct BatchConfirmSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var isRunning = false
+
+    let action: AccountBatchAction
+    let count: Int
+    let onConfirm: () async -> Void
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 20) {
+                Image(systemName: action.symbol)
+                    .font(.system(size: 44))
+                    .foregroundStyle(action.isDestructive ? .red : .tint)
+
+                Text(action.title)
+                    .font(.title3.weight(.semibold))
+
+                Text("将对 \(count) 个账号执行「\(action.title)」。")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+
+                if action.isDestructive {
+                    Text("该操作不可恢复。")
+                        .font(.footnote)
+                        .foregroundStyle(.red)
+                }
+
+                Button {
+                    Task {
+                        isRunning = true
+                        await onConfirm()
+                        isRunning = false
+                        dismiss()
+                    }
+                } label: {
+                    if isRunning {
+                        HStack { ProgressView().controlSize(.small); Text("执行中…") }
+                    } else {
+                        Text("确认执行")
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(action.isDestructive ? .red : .accentColor)
+                .disabled(isRunning)
+
+                Spacer()
+            }
+            .padding(24)
+            .navigationTitle("确认")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("取消") { dismiss() }
+                }
+            }
+        }
+        .presentationDetents([.medium])
+    }
+}
+
 @Observable
 final class AccountListViewModel {
     var accounts: [Account] = []
@@ -125,6 +271,14 @@ final class AccountListViewModel {
     var platformFilter = ""
     var statusFilter = ""
 
+    // 多选批量操作状态
+    var isSelecting = false
+    var selectedIds: Set<Int> = []
+    var showBatchSheet = false
+    var pendingBatchAction: AccountBatchAction?
+    var showBatchResult = false
+    var batchResultMessage = ""
+
     /// 常见上游平台（作为筛选项）
     let platforms = ["claude", "openai", "gemini", "antigravity", "grok", "kimi", "zhipu", "deepseek"]
 
@@ -134,6 +288,62 @@ final class AccountListViewModel {
     private var loadedOnce = false
 
     private var client: APIClient? { AppStateHolder.shared.client }
+
+    // MARK: - 选择
+
+    func enterSelection() {
+        isSelecting = true
+        selectedIds.removeAll()
+    }
+
+    func exitSelection() {
+        isSelecting = false
+        selectedIds.removeAll()
+        pendingBatchAction = nil
+    }
+
+    func isSelected(_ account: Account) -> Bool {
+        selectedIds.contains(account.id)
+    }
+
+    func toggleSelection(_ account: Account) {
+        if selectedIds.contains(account.id) {
+            selectedIds.remove(account.id)
+        } else {
+            selectedIds.insert(account.id)
+        }
+    }
+
+    func selectAll() {
+        for account in accounts where !selectedIds.contains(account.id) {
+            selectedIds.insert(account.id)
+        }
+    }
+
+    // MARK: - 批量操作
+
+    func runBatch(_ action: AccountBatchAction) async {
+        guard let client, !selectedIds.isEmpty else { return }
+        do {
+            struct BatchBody: Encodable { let account_ids: [Int] }
+            let _: EmptyData = try await client.request(
+                "POST", "/admin/accounts/\(action.rawValue)",
+                body: BatchBody(account_ids: Array(selectedIds))
+            )
+            batchResultMessage = "「\(action.title)」已提交（\(selectedIds.count) 个账号）。"
+            showBatchResult = true
+            if action.isDestructive {
+                selectedIds.removeAll()
+            }
+            await reload()
+        } catch {
+            batchResultMessage = "执行失败：\(error.localizedDescription)"
+            showBatchResult = true
+        }
+        pendingBatchAction = nil
+    }
+
+    // MARK: - 列表加载
 
     func reloadIfNeeded() async {
         guard !loadedOnce else { return }
