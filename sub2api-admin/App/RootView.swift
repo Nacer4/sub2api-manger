@@ -25,7 +25,7 @@ struct MainTabView: View {
                 .tabItem { Label("用户", systemImage: "person.2") }
 
             AccountListView()
-                .tabItem { Label("账号", systemImage: "server.rack") }
+                .tabItem { Label("账号管理", systemImage: "server.rack") }
 
             UsageListView()
                 .tabItem { Label("日志", systemImage: "doc.text.magnifyingglass") }

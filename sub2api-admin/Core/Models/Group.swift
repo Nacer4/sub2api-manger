@@ -1,6 +1,6 @@
 import Foundation
 
-/// 分组（账号池 / 模型路由）
+/// 分组（账号管理 / 模型路由）
 /// 注意：不命名为 Group，避免与 SwiftUI.Group 冲突
 struct AccountGroup: Decodable, Identifiable, Hashable {
     let id: Int

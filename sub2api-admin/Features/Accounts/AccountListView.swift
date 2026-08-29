@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// 上游账号列表：分页 + 平台/状态/等级/认证筛选 + 多选批量操作
+/// 账号管理：分页 + 平台/状态/等级/认证筛选 + 多选批量操作 + 新增账号 + 分组管理
 struct AccountListView: View {
     @State private var viewModel = AccountListViewModel()
 
@@ -45,7 +45,7 @@ struct AccountListView: View {
                 .listRowSeparator(.hidden)
             }
         }
-        .navigationTitle("账号池")
+        .navigationTitle("账号管理")
         .searchable(text: $viewModel.searchText, prompt: "搜索账号名称")
         .onChange(of: viewModel.searchText) { _, _ in
             viewModel.debouncedSearch()
@@ -67,6 +67,13 @@ struct AccountListView: View {
                 }
             } else {
                 ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        viewModel.showAddSheet = true
+                    } label: {
+                        Label("新增", systemImage: "plus")
+                    }
+                }
+                ToolbarItem(placement: .topBarTrailing) {
                     NavigationLink {
                         GroupListView()
                     } label: {
@@ -79,6 +86,15 @@ struct AccountListView: View {
                     } label: {
                         Label("选择", systemImage: "checkmark.circle")
                     }
+                }
+            }
+        }
+        .sheet(isPresented: $viewModel.showAddSheet) {
+            AccountAddSheet { name, platform, authType, credential in
+                Task {
+                    await viewModel.createAccount(
+                        name: name, platform: platform, authType: authType, credential: credential
+                    )
                 }
             }
         }
@@ -233,9 +249,148 @@ struct AccountRow: View {
     }
 }
 
-/// 批量操作确认弹窗（删除类操作红色确认 + 选中账号预览）
-struct BatchConfirmSheet: View {
+/// 新增账号 Sheet（对标 sub2api 官方 dashboard：OAuth 授权流 / API Key 两种方式）
+/// OAuth：生成授权链接（POST /admin/{platform}/oauth/auth-url）→ 浏览器完成授权 → 粘贴回跳码交换
+/// API Key：直填 key 创建（POST /admin/accounts）
+struct AccountAddSheet: View {
     @Environment(\.dismiss) private var dismiss
+
+    @State private var name = ""
+    @State private var platform = "claude"
+    @State private var authType = "api_key"
+    @State private var apiKey = ""
+    @State private var proxy = ""
+    @State private var oauthURL = ""
+    @State private var oauthCode = ""
+    @State private var isGeneratingURL = false
+    @State private var isSaving = false
+
+    let onCreate: (_ name: String, _ platform: String, _ authType: String, _ credential: String) -> Void
+
+    private let platforms = ["claude", "openai", "gemini", "antigravity", "grok"]
+    private var isOAuth: Bool { authType == "oauth" }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("基本信息") {
+                    TextField("名称（必填）", text: $name)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                    Picker("平台", selection: $platform) {
+                        ForEach(platforms, id: \.self) { Text($0).tag($0) }
+                    }
+                }
+
+                Section {
+                    Picker("认证方式", selection: $authType) {
+                        Text("API Key").tag("api_key")
+                        Text("OAuth").tag("oauth")
+                    }
+                    .pickerStyle(.segmented)
+                    .listRowBackground(Color.clear)
+
+                    if isOAuth {
+                        // OAuth 两步：生成授权链接 → 粘贴回跳码
+                        VStack(alignment: .leading, spacing: 8) {
+                            Button {
+                                generateAuthURL()
+                            } label: {
+                                if isGeneratingURL {
+                                    HStack { ProgressView(); Text("生成中…") }
+                                } else {
+                                    Label("生成 OAuth 授权链接", systemImage: "link")
+                                }
+                            }
+                            .disabled(isGeneratingURL || isSaving)
+
+                            if !oauthURL.isEmpty {
+                                Text(oauthURL)
+                                    .font(.caption.monospaced())
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(3)
+                                    .textSelection(.enabled)
+                            }
+
+                            TextField("粘贴回跳链接或授权码", text: $oauthCode)
+                                .font(.caption.monospaced())
+                                .textInputAutocapitalization(.never)
+                                .autocorrectionDisabled()
+                        }
+                    } else {
+                        TextField("API Key（sk-…）", text: $apiKey)
+                            .font(.body.monospaced())
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                        TextField("代理（可选）", text: $proxy)
+                            .font(.caption.monospaced())
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                    }
+                } header: {
+                    Text("认证")
+                } footer: {
+                    Text(isOAuth
+                         ? "先生成授权链接并在浏览器完成授权，再粘贴回跳链接或授权码。"
+                         : "API Key 将以密文存储，保存后不可查看。")
+                }
+            }
+            .navigationTitle("新增账号")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("取消") { dismiss() }
+                        .disabled(isSaving)
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("保存") {
+                        isSaving = true
+                        let credential = isOAuth
+                            ? oauthCode.trimmingCharacters(in: .whitespaces)
+                            : apiKey.trimmingCharacters(in: .whitespaces)
+                        onCreate(name.trimmingCharacters(in: .whitespaces), platform, authType, credential)
+                        isSaving = false
+                        dismiss()
+                    }
+                    .disabled(!canSave || isSaving)
+                }
+            }
+        }
+        .presentationDetents([.large])
+    }
+
+    private var canSave: Bool {
+        guard !name.trimmingCharacters(in: .whitespaces).isEmpty else { return false }
+        return isOAuth ? !oauthCode.trimmingCharacters(in: .whitespaces).isEmpty
+                       : !apiKey.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
+    /// 生成 OAuth 授权链接（POST /admin/{platform}/oauth/auth-url）
+    private func generateAuthURL() {
+        guard let client = AppStateHolder.shared.client else { return }
+        isGeneratingURL = true
+        Task {
+            defer { isGeneratingURL = false }
+            struct Body: Encodable { let platform: String }
+            struct Resp: Decodable { let authUrl: String?; let url: String?
+                enum CodingKeys: String, CodingKey {
+                    case authUrl = "auth_url", url
+                }
+            }
+            if let resp: Resp = try? await client.request(
+                "POST", "/admin/\(platform)/oauth/auth-url", body: Body(platform: platform)
+            ) {
+                oauthURL = resp.authUrl ?? resp.url ?? ""
+                if oauthURL.isEmpty { oauthURL = "授权链接为空，请检查服务端配置。" }
+            } else {
+                oauthURL = "生成失败：无法连接服务器。"
+            }
+        }
+    }
+}
+
+/// 批量操作确认弹窗（删除类操作红色确认 + 选中账号预览）
+struct BatchConfirmSheet: View {    @Environment(\.dismiss) private var dismiss
     @State private var isRunning = false
 
     let action: AccountBatchAction
@@ -338,6 +493,9 @@ final class AccountListViewModel {
     var showBatchResult = false
     var batchResultMessage = ""
 
+    // 新增账号
+    var showAddSheet = false
+
     /// 常见上游平台（作为筛选项）
     let platforms = ["claude", "openai", "gemini", "antigravity", "grok", "kimi", "zhipu", "deepseek"]
 
@@ -414,6 +572,52 @@ final class AccountListViewModel {
             showBatchResult = true
         }
         pendingBatchAction = nil
+    }
+
+    // MARK: - 新增账号
+
+    /// 创建账号（POST /admin/accounts）
+    /// - API Key：credential 为 key 明文
+    /// - OAuth：credential 为回跳链接或授权码，先经 exchange-code 交换再创建
+    func createAccount(name: String, platform: String, authType: String, credential: String) async {
+        guard let client, !name.isEmpty, !credential.isEmpty else { return }
+        do {
+            var finalCredential = credential
+            if authType == "oauth" {
+                // OAuth：先交换授权码（POST /admin/{platform}/oauth/exchange-code）
+                struct ExchangeBody: Encodable { let code: String }
+                struct ExchangeResp: Decodable {
+                    let apiKey: String?; let api_key: String?
+                    let accessToken: String?
+                }
+                if let resp: ExchangeResp = try? await client.request(
+                    "POST", "/admin/\(platform)/oauth/exchange-code",
+                    body: ExchangeBody(code: credential)
+                ) {
+                    finalCredential = resp.apiKey ?? resp.api_key ?? resp.accessToken ?? credential
+                }
+            }
+            struct Body: Encodable {
+                let name: String
+                let platform: String
+                let authType: String
+                let apiKey: String
+                enum CodingKeys: String, CodingKey {
+                    case name, platform, apiKey
+                    case authType = "auth_type"
+                }
+            }
+            let _: EmptyData = try await client.request(
+                "POST", "/admin/accounts",
+                body: Body(name: name, platform: platform, authType: authType, apiKey: finalCredential)
+            )
+            batchResultMessage = "账号「\(name)」已创建。"
+            showBatchResult = true
+            await reload()
+        } catch {
+            batchResultMessage = "创建失败：\(error.localizedDescription)"
+            showBatchResult = true
+        }
     }
 
     // MARK: - 列表加载

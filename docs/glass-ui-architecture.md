@@ -366,7 +366,7 @@ struct GlassSegmentedPicker<Option: Hashable & Identifiable>: View {
 
 ### 7.3 GlassBatchBar（浮动批量操作条 · 玻璃浮层档）
 
-账号池多选模式的悬浮操作条，对应 Web `#batch-bar`：
+账号管理多选模式的悬浮操作条，对应 Web `#batch-bar`：
 
 ```swift
 struct GlassBatchBar: View {
@@ -547,7 +547,7 @@ struct GlassPressStyle: ButtonStyle {
 
 ### 9.1 MainTabView（根导航）
 
-**决策：不自绘玻璃 Tab 栏**。iOS 26 的 `TabView` 自带 Liquid Glass 浮岛效果，与 Web 原型视觉一致；降级到 iOS 17/18 时系统 Tab 栏 + `.toolbarBackground(.ultraThinMaterial, for: .tabBar)`。保留账号池 tab 的错误数角标（`.badge()`）。
+**决策：不自绘玻璃 Tab 栏**。iOS 26 的 `TabView` 自带 Liquid Glass 浮岛效果，与 Web 原型视觉一致；降级到 iOS 17/18 时系统 Tab 栏 + `.toolbarBackground(.ultraThinMaterial, for: .tabBar)`。保留账号管理 tab 的错误数角标（`.badge()`）。
 
 ```swift
 struct MainTabView: View {
@@ -557,7 +557,7 @@ struct MainTabView: View {
     var body: some View {
         TabView {
             DashboardView().tabItem { Label("仪表盘", systemImage: "square.grid.2x2.fill") }
-            AccountListView().tabItem { Label("账号池", systemImage: "server.rack") }
+            AccountListView().tabItem { Label("账号管理", systemImage: "server.rack") }
                 .badge(appState.errorAccountCount)
             UsageListView().tabItem { Label("日志", systemImage: "doc.text.magnifyingglass") }
             SettingsView().tabItem { Label("设置", systemImage: "gearshape") }
@@ -582,7 +582,7 @@ struct MainTabView: View {
 - 消费/模型排行：实底卡 + 条形延迟动画
 - 下拉刷新 `refreshable`（沿用现有 ViewModel）
 
-### 9.3 账号池 AccountListView
+### 9.3 账号管理 AccountListView
 
 - 大标题 + 右上「选择」按钮切换多选模式（标题变「已选 N」）
 - 平台 chips 横滑（`ScrollView(.horizontal)` + 渐隐遮罩 `mask`）

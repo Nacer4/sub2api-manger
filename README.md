@@ -46,7 +46,7 @@ sub2api-manger/
     │   ├── Auth/                    # 登录 + 服务器编辑
     │   ├── Dashboard/               # 仪表盘
     │   ├── Users/                   # 用户列表/详情/余额
-    │   ├── Accounts/                # 账号池列表/详情/运维操作
+    │   ├── Accounts/                # 账号管理列表/详情/运维操作
     │   ├── Usage/                   # 使用记录 + 错误请求
     │   └── Settings/                # 设置
     └── DesignSystem/                # StatCard/StatusPill/空态/格式化
@@ -94,7 +94,7 @@ sub2api-manger/
 - 3.3 余额调整（Sheet）：增加 / 扣减 / 设为 三种操作 + 备注，携带 Idempotency-Key，提交后自动刷新
 - 3.4 启用/禁用账号（PUT users/:id，确认弹窗）
 
-### 4. 账号池（Accounts）
+### 4. 账号管理（Accounts）
 
 - 4.1 列表：分页；按平台（claude/openai/gemini/antigravity/grok/国产）与状态（active/error/rate_limited/expired）筛选；名称搜索防抖；平台图标 + 状态徽标 + 最近使用时间
 - 4.2 详情：
@@ -110,6 +110,10 @@ sub2api-manger/
   - 批量刷新账号等级 `POST /admin/accounts/batch-refresh-tier`
   - 批量删除（红色警告 + 选中账号预览）`POST /admin/accounts/batch-delete`
   - 确认弹窗展示选中账号名称预览（前 5 项 + 溢出计数）；执行中禁用；完成后自动重载列表
+- 4.6 新增账号（对标 sub2api 官方 dashboard 的两种认证方式）：
+  - API Key：直填 key + 可选代理，`POST /admin/accounts` 创建
+  - OAuth 授权流：`POST /admin/{platform}/oauth/auth-url` 生成授权链接 → 浏览器完成授权 → 粘贴回跳链接/授权码 → `POST /admin/{platform}/oauth/exchange-code` 交换凭证后创建
+- 4.7 分组管理：分组列表/新建/编辑/删除（`/admin/groups` CRUD），模型路由 + 优先级
 
 ### 5. 日志（Logs）
 
@@ -149,8 +153,9 @@ sub2api-manger/
 |---|---|---|---|
 | P0 | 日志增强 | 使用记录多条件筛选（日期范围/user_id/account_id/是否流式）、错误详情钻取、上游错误查看 | ✅ 已完成 |
 | P0 | 账号操作补全 | 批量操作（批量刷新/清错/刷新等级/删除） | ✅ 已完成 |
-| P0 | 账号操作补全 | OAuth 授权流（generate-auth-url → 回跳 exchange-code）、代理绑定 | 待开发 |
-| P1 | 分组管理 | 列表/详情/模型路由/计费倍率/RPM 覆盖 | 待开发 |
+| P0 | 账号操作补全 | 新增账号（OAuth 授权流两步交换 / API Key 直填） | ✅ 已完成 |
+| P0 | 分组管理 | 分组列表/新建/编辑/删除 | ✅ 已完成 |
+| P1 | 账号操作补全 | 代理管理（独立列表/绑定账号）、账号编辑 | 待开发 |
 | P1 | 卡密 | 兑换码生成/列表/作废/导出，优惠码管理 | 待开发 |
 | P1 | 订阅 | 订阅列表/分配/延期/撤销/配额重置 | 待开发 |
 | P2 | 运维监控 | 实时 QPS（WebSocket 子协议携带 JWT）、告警规则与事件、并发/账号可用性 | 待开发 |

@@ -451,10 +451,11 @@ body{
       </div>
     </section>
 
-    <!-- ================= 账号池 ================= -->
+    <!-- ================= 账号管理 ================= -->
     <section class="view" id="v-acct">
       <div class="page-head">
-        <div><h1 id="acct-title">账号池</h1><div class="sub" id="acct-sub">RESOURCES · 26 POOL</div></div>
+        <div><h1 id="acct-title">账号管理</h1><div class="sub" id="acct-sub">RESOURCES · 26 POOL</div></div>
+        <button class="head-btn" id="btn-acct-add" title="新增账号"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
         <button class="head-btn" id="btn-groups" title="分组管理"><svg viewBox="0 0 24 24"><path d="M12 2l9 5-9 5-9-5 9-5z"/><path d="M3 12l9 5 9-5"/><path d="M3 17l9 5 9-5"/></svg></button>
         <button class="head-btn" id="btn-select"><svg viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></button>
       </div>
@@ -532,7 +533,7 @@ body{
     <nav class="tabbar">
       <button class="tab on" data-v="dash"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9" rx="2"/><rect x="14" y="3" width="7" height="5" rx="2"/><rect x="14" y="12" width="7" height="9" rx="2"/><rect x="3" y="16" width="7" height="5" rx="2"/></svg>仪表盘</button>
       <button class="tab" data-v="users"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="4"/><path d="M2 21c0-4 3-6 7-6s7 2 7 6"/><path d="M16 3.5a4 4 0 0 1 0 9"/></svg>用户</button>
-      <button class="tab" data-v="acct"><svg viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></svg>账号池<span class="dot" id="tab-badge">14</span></button>
+      <button class="tab" data-v="acct"><svg viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></svg>账号管理<span class="dot" id="tab-badge">14</span></button>
       <button class="tab" data-v="logs"><svg viewBox="0 0 24 24"><path d="M4 4h16v16H4z"/><path d="M8 9h8M8 13h8M8 17h5"/></svg>日志</button>
       <button class="tab" data-v="set"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M19.1 4.9L17 7M7 17l-2.1 2.1"/></svg>设置</button>
     </nav>
@@ -590,6 +591,41 @@ body{
       <div class="sheet-acts" style="margin-top:24px">
         <button class="link" id="g-cancel">取消</button>
         <button class="btn primary" id="g-save" style="min-width:110px">保存</button>
+      </div>
+    </div>
+
+    <!-- Sheet：新增账号（OAuth 授权流 / API Key，对标 sub2api 官方 dashboard） -->
+    <div class="sheet" id="sh-acct-add">
+      <div class="grabber"></div>
+      <h2>新增账号</h2>
+      <div class="fld"><label>平台</label>
+        <div class="seg" id="na-plat" style="margin:0"><div class="pill"></div><button class="on" data-np="claude">claude</button><button data-np="openai">openai</button><button data-np="gemini">gemini</button><button data-np="grok">grok</button></div>
+      </div>
+      <div class="fld"><label>认证方式</label>
+        <div class="seg" id="na-auth" style="margin:0"><div class="pill"></div><button class="on" data-nat="oauth">OAuth 授权</button><button data-nat="api_key">API Key</button></div>
+      </div>
+      <!-- OAuth 流：生成授权链接 → 粘贴回跳 → 交换 -->
+      <div id="na-oauth">
+        <div class="fld"><label>STEP 1 · 生成授权链接</label>
+          <button class="btn small" id="na-genurl" style="width:100%; border-radius:13px">生成 OAuth 授权链接</button>
+          <div class="codeblk" id="na-url" style="display:none; margin-top:9px; word-break:break-all"></div>
+        </div>
+        <div class="fld"><label>STEP 2 · 粘贴回跳链接或授权码</label>
+          <input class="finput" id="na-code" placeholder="粘贴回调 URL / code=…" style="font-family:var(--mono)">
+        </div>
+      </div>
+      <!-- API Key 直填 -->
+      <div id="na-key" style="display:none">
+        <div class="fld"><label>API KEY</label>
+          <input class="finput" id="na-apikey" placeholder="sk-ant-… / sk-…" style="font-family:var(--mono)">
+        </div>
+        <div class="fld"><label>代理（可选）</label>
+          <input class="finput" id="na-proxy" placeholder="http://user:pass@host:port" style="font-family:var(--mono)">
+        </div>
+      </div>
+      <div class="sheet-acts" style="margin-top:24px">
+        <button class="link" id="na-cancel">取消</button>
+        <button class="btn primary" id="na-save" style="min-width:130px">保存账号</button>
       </div>
     </div>
 
@@ -814,7 +850,7 @@ function openUserPush(u){
   };
 }
 
-/* ============ 账号池 ============ */
+/* ============ 账号管理 ============ */
 let sel=new Set(),selectMode=false,platF='',stF='',tierF='',authF='',kw='';
 const BATCHES={'batch-refresh':{t:'批量刷新凭证',d:false},'batch-clear-error':{t:'批量清除错误状态',d:false},'batch-refresh-tier':{t:'批量刷新账号等级',d:false},'batch-delete':{t:'批量删除账号',d:true}};
 const TIER_CLS={free:'mut',pro:'info',max5:'warn',max20:'ok'};
@@ -848,7 +884,7 @@ function renderAcct(){
 }
 $('#btn-select').onclick=()=>{
   selectMode=!selectMode; if(!selectMode)sel.clear();
-  $('#acct-title').textContent=selectMode?`已选 ${sel.size}`:'账号池';
+  $('#acct-title').textContent=selectMode?`已选 ${sel.size}`:'账号管理';
   renderAcct();
 };
 $('#acct-list').onclick=e=>{
@@ -978,6 +1014,36 @@ $('#log-tabs').addEventListener('segchange',e=>{
   $('#tab-usage').style.display=e.detail.t==='usage'?'block':'none';
   $('#tab-errors').style.display=e.detail.t==='errors'?'block':'none';
 });
+
+/* ============ 新增账号（OAuth 授权流 / API Key） ============ */
+let naPlat='claude', naAuth='oauth';
+$('#na-plat').addEventListener('segchange',e=>{naPlat=e.detail.np;});
+$('#na-auth').addEventListener('segchange',e=>{
+  naAuth=e.detail.nat;
+  $('#na-oauth').style.display=naAuth==='oauth'?'block':'none';
+  $('#na-key').style.display=naAuth==='api_key'?'block':'none';
+});
+$('#btn-acct-add').onclick=()=>{
+  $('#na-url').style.display='none'; $('#na-code').value='';
+  $('#na-apikey').value=''; $('#na-proxy').value='';
+  $('#ov').classList.add('show'); $('#sh-acct-add').classList.add('show');
+};
+$('#na-cancel').onclick=closeSheets;
+$('#na-genurl').onclick=()=>{
+  // 对标 POST /admin/{platform}/oauth/auth-url
+  const url=`https://auth.${naPlat}.com/oauth/authorize?client_id=sub2api&state=${Math.random().toString(36).slice(2,10)}&redirect_uri=https://your-sub2api.com/callback`;
+  const el=$('#na-url'); el.textContent=url; el.style.display='block';
+  toast('授权链接已生成，请在浏览器完成授权');
+};
+$('#na-save').onclick=()=>{
+  if(naAuth==='oauth'&&!$('#na-code').value.trim()){toast('请粘贴回跳链接或授权码','err'); return;}
+  if(naAuth==='api_key'&&!$('#na-apikey').value.trim()){toast('API Key 不能为空','err'); return;}
+  const id=Math.max(...accounts.map(a=>a.id))+1;
+  accounts.unshift({id,name:`${naPlat}-pool-${String(accounts.length+1).padStart(2,'0')}`,plat:naPlat,
+    status:'active',tier:'free',auth:naAuth,req:0,sched:true,last:'刚刚'});
+  closeSheets(); renderAcct();
+  toast(naAuth==='oauth'?'OAuth 授权码已交换，账号已创建':'API Key 账号已创建');
+};
 
 /* ============ 分组管理 ============ */
 const groups=[

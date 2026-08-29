@@ -1,6 +1,6 @@
 import Foundation
 
-/// 上游账号（账号池）模型
+/// 上游账号（账号管理）模型
 struct Account: Decodable, Identifiable, Hashable {
     let id: Int
     let name: String?
