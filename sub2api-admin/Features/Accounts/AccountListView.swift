@@ -5,7 +5,8 @@ struct AccountListView: View {
     @State private var viewModel = AccountListViewModel()
 
     var body: some View {
-        List {
+        NavigationStack {
+            List {
             if viewModel.isSelecting {
                 selectionSection
             }
@@ -66,6 +67,13 @@ struct AccountListView: View {
                 }
             } else {
                 ToolbarItem(placement: .topBarTrailing) {
+                    NavigationLink {
+                        GroupListView()
+                    } label: {
+                        Label("分组", systemImage: "square.stack.3d.up")
+                    }
+                }
+                ToolbarItem(placement: .topBarTrailing) {
                     Button {
                         viewModel.enterSelection()
                     } label: {
@@ -95,6 +103,7 @@ struct AccountListView: View {
             if viewModel.isLoading, viewModel.accounts.isEmpty {
                 LoadingView()
             }
+        }
         }
     }
 

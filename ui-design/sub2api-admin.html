@@ -325,6 +325,19 @@ body{
 .up-card .hd .st{margin-left:auto; font-family:var(--mono); font-size:10px; color:var(--err); font-weight:700}
 .up-card .msg{font-family:var(--mono); font-size:10px; color:var(--ink-2); margin-top:7px; line-height:1.6; word-break:break-all}
 .up-card .meta{font-family:var(--mono); font-size:9px; color:var(--ink-3); margin-top:7px; display:flex; gap:12px}
+
+/* ============ 分组卡片 ============ */
+.grp-card{padding:15px; border-radius:var(--r-md); background:rgba(255,255,255,.045); border:1px solid rgba(255,255,255,.06); margin-bottom:10px; cursor:pointer; transition:all .25s var(--ease)}
+.grp-card:active{transform:scale(.98); background:rgba(255,255,255,.07)}
+.grp-card .hd{display:flex; align-items:center; gap:9px}
+.grp-card .nm{font-size:14.5px; font-weight:600}
+.grp-card .pr{margin-left:auto; font-family:var(--mono); font-size:9px; color:var(--accent-2); border:1px solid rgba(255,138,61,.35); padding:2px 7px; border-radius:5px}
+.grp-card .desc{font-size:11px; color:var(--ink-3); margin-top:5px; line-height:1.5}
+.grp-card .models{display:flex; flex-wrap:wrap; gap:6px; margin-top:10px}
+.grp-card .mchip{font-family:var(--mono); font-size:9.5px; color:var(--info); background:rgba(108,184,255,.10); border:1px solid rgba(108,184,255,.22); padding:3px 8px; border-radius:6px}
+.grp-card .gmeta{display:flex; justify-content:space-between; align-items:center; font-family:var(--mono); font-size:9.5px; color:var(--ink-3); margin-top:11px}
+.grp-card .gdel{background:none; border:none; color:var(--err); font-size:10px; cursor:pointer; padding:4px 6px; border-radius:6px; font-family:var(--font)}
+.grp-card .gdel:active{background:rgba(255,107,107,.12)}
 .d-acts{display:flex; gap:10px; margin:4px 0 20px}
 .d-acts .btn{flex:1}
 
@@ -442,6 +455,7 @@ body{
     <section class="view" id="v-acct">
       <div class="page-head">
         <div><h1 id="acct-title">账号池</h1><div class="sub" id="acct-sub">RESOURCES · 26 POOL</div></div>
+        <button class="head-btn" id="btn-groups" title="分组管理"><svg viewBox="0 0 24 24"><path d="M12 2l9 5-9 5-9-5 9-5z"/><path d="M3 12l9 5 9-5"/><path d="M3 17l9 5 9-5"/></svg></button>
         <button class="head-btn" id="btn-select"><svg viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></button>
       </div>
       <div class="search"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg><input id="acct-search" placeholder="搜索账号名称…"></div>
@@ -562,6 +576,20 @@ body{
       <div class="sheet-acts" style="margin-top:24px">
         <button class="link" id="f-reset">重置</button>
         <button class="btn primary" id="f-apply" style="min-width:110px">应用筛选</button>
+      </div>
+    </div>
+
+    <!-- Sheet：分组编辑 -->
+    <div class="sheet" id="sh-group">
+      <div class="grabber"></div>
+      <h2 id="g-sh-title">新建分组</h2>
+      <div class="fld"><label>名称</label><input class="finput" id="g-name" placeholder="如 premium"></div>
+      <div class="fld"><label>描述</label><input class="finput" id="g-desc" placeholder="分组用途说明"></div>
+      <div class="fld"><label>模型列表（逗号分隔）</label><input class="finput" id="g-models" placeholder="claude-sonnet-4.5, gpt-5.2-codex" style="font-family:var(--mono)"></div>
+      <div class="fld"><label>优先级（越大越优先）</label><input class="finput" id="g-pri" type="number" value="0"></div>
+      <div class="sheet-acts" style="margin-top:24px">
+        <button class="link" id="g-cancel">取消</button>
+        <button class="btn primary" id="g-save" style="min-width:110px">保存</button>
       </div>
     </div>
 
@@ -950,6 +978,66 @@ $('#log-tabs').addEventListener('segchange',e=>{
   $('#tab-usage').style.display=e.detail.t==='usage'?'block':'none';
   $('#tab-errors').style.display=e.detail.t==='errors'?'block':'none';
 });
+
+/* ============ 分组管理 ============ */
+const groups=[
+  {id:1,name:'default',desc:'默认分组 · 全平台兜底',models:['claude-sonnet-4.5','gpt-5.2-codex','gemini-3-pro'],priority:0,acct:8},
+  {id:2,name:'premium',desc:'高优先级 Opus 池 · 大账户专用',models:['claude-opus-4.1'],priority:100,acct:4},
+  {id:3,name:'codex',desc:'Codex 专用路由池',models:['gpt-5.2-codex'],priority:50,acct:6},
+  {id:4,name:'budget',desc:'低成本兜底 · 轻量任务',models:['claude-haiku-4.5','grok-4'],priority:10,acct:8},
+];
+let gEditing=null; // null=新建，否则为编辑中的分组
+function renderGroups(){
+  $('#push-body').innerHTML=`
+    <div class="d-sec" style="padding:13px 15px; display:flex; align-items:center; gap:10px; cursor:pointer" id="g-new">
+      <span style="font-size:14px; color:var(--accent-2); line-height:1">＋</span>
+      <span style="font-size:13px; font-weight:600; color:var(--accent-2)">新建分组</span>
+      <span style="margin-left:auto; font-family:var(--mono); font-size:9.5px; color:var(--ink-3)">${groups.length} GROUPS</span>
+    </div>
+    ${groups.map(g=>`
+    <div class="grp-card" data-g="${g.id}">
+      <div class="hd"><span class="nm">${g.name}</span><span class="pr">P${g.priority}</span></div>
+      <div class="desc">${g.desc||'-'}</div>
+      <div class="models">${g.models.map(m=>`<span class="mchip">${m}</span>`).join('')}</div>
+      <div class="gmeta"><span>${g.acct} 个账号</span><span>#${g.id}</span><button class="gdel" data-gdel="${g.id}">删除</button></div>
+    </div>`).join('')}`;
+  $('#g-new').onclick=()=>openGroupSheet(null);
+  $$('.grp-card').forEach(c=>{
+    c.onclick=e=>{
+      if(e.target.closest('.gdel'))return;
+      openGroupSheet(groups.find(g=>g.id===+c.dataset.g));
+    };
+  });
+  $$('[data-gdel]').forEach(b=>b.onclick=e=>{
+    e.stopPropagation();
+    const id=+b.dataset.gdel, g=groups.find(x=>x.id===id);
+    groups.splice(groups.indexOf(g),1); renderGroups();
+    toast(`分组「${g.name}」已删除`,'err');
+  });
+}
+function openGroupSheet(g){
+  gEditing=g;
+  $('#g-sh-title').textContent=g?'编辑分组':'新建分组';
+  $('#g-name').value=g?.name||'';
+  $('#g-desc').value=g?.desc||'';
+  $('#g-models').value=(g?.models||[]).join(', ');
+  $('#g-pri').value=g?.priority??0;
+  $('#ov').classList.add('show'); $('#sh-group').classList.add('show');
+}
+$('#g-cancel').onclick=closeSheets;
+$('#g-save').onclick=()=>{
+  const name=$('#g-name').value.trim(), models=$('#g-models').value.split(',').map(s=>s.trim()).filter(Boolean);
+  if(!name){toast('名称不能为空','err'); return;}
+  const data={name,desc:$('#g-desc').value.trim(),models,priority:+$('#g-pri').value||0};
+  if(gEditing){Object.assign(gEditing,data); toast(`分组「${name}」已更新`);}
+  else{groups.unshift({id:Math.max(0,...groups.map(g=>g.id))+1,acct:0,...data}); toast(`分组「${name}」已创建`);}
+  closeSheets(); renderGroups();
+};
+$('#btn-groups').onclick=()=>{
+  $('#push-title').textContent='分组管理';
+  renderGroups();
+  $('#push').classList.add('show');
+};
 
 /* ============ 错误详情 Push ============ */
 const fmtMs=v=>v>=1000?(v/1000).toFixed(2)+'s':v+'ms';
