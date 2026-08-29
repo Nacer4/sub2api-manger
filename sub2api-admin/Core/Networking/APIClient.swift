@@ -2,14 +2,32 @@ import Foundation
 
 /// sub2api 管理 API 客户端
 /// - 双通道认证：JWT（Bearer）或 Admin API Key（x-api-key）
-/// - 401 时自动尝试 refresh，失败后抛 unauthorized
+/// - 401 时自动尝试 refresh，失败后抛 unauthorized 并触发全局会话失效回调
 final class APIClient {
     let server: ServerConfig
     private let session: URLSession
     private let decoder = JSONDecoder()
 
+    /// 会话确认失效（refresh 失败 / AdminKey 无效）时回调，由 AppState 接管全局登出
+    var onSessionInvalid: (() -> Void)?
+
     /// 服务器 API 前缀
     static let apiPrefix = "/api/v1"
+
+    /// 刷新去重门：并发 401 共享同一次 refresh（refresh token 一次性轮换场景下避免全军覆没）
+    private static let refreshGate = RefreshGate()
+
+    private actor RefreshGate {
+        private var inflight: [String: Task<Bool, Never>] = [:]
+
+        func dedupe(key: String, perform: @escaping () async -> Bool) async -> Bool {
+            if let existing = inflight[key] { return await existing.value }
+            let task = Task { await perform() }
+            inflight[key] = task
+            defer { inflight[key] = nil }
+            return await task.value
+        }
+    }
 
     init(server: ServerConfig) {
         self.server = server
@@ -60,7 +78,7 @@ final class APIClient {
         let data = try await raw(method, path, query: query, body: body)
         let envelope = try decoder.decode(APIEnvelope<T>.self, from: data)
         guard envelope.code == 0 else {
-            throw APIError.http(status: envelope.code, message: envelope.message, reason: nil)
+            throw APIError.http(status: envelope.code, message: envelope.message ?? "请求失败", reason: nil)
         }
         guard let payload = envelope.data else {
             // code == 0 但无 data：尝试按空对象解析
@@ -123,11 +141,21 @@ final class APIClient {
         }
         guard let http = response as? HTTPURLResponse else { throw APIError.invalidResponse }
 
-        // 401：JWT 模式尝试刷新一次
-        if http.statusCode == 401, server.authMode == .jwt, !isRetry {
-            if try await refreshTokens() {
-                return try await raw(method, path, query: query, body: body, isRetry: true)
+        // 401：JWT 模式先尝试刷新一次（去重，并发 401 共享同一结果）
+        if http.statusCode == 401, !isRetry {
+            if server.authMode == .jwt {
+                let refreshed = await Self.refreshGate.dedupe(
+                    key: server.id.uuidString
+                ) { [weak self] in
+                    guard let self else { return false }
+                    return (try? await self.refreshTokens()) ?? false
+                }
+                if refreshed {
+                    return try await raw(method, path, query: query, body: body, isRetry: true)
+                }
             }
+            // refresh 失败或 AdminKey 无效：全局会话失效，回到登录页
+            onSessionInvalid?()
             throw APIError.unauthorized
         }
         guard (200...299).contains(http.statusCode) else {

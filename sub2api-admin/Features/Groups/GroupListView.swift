@@ -211,6 +211,7 @@ struct GroupEditSheet: View {
 
 // MARK: - ViewModel
 
+@MainActor
 @Observable
 final class GroupListViewModel {
     var groups: [AccountGroup] = []

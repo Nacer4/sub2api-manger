@@ -168,6 +168,7 @@ struct LabeledRow: View {
     }
 }
 
+@MainActor
 @Observable
 final class UserDetailViewModel {
     var user: User?

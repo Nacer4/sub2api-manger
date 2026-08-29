@@ -2,6 +2,7 @@ import Foundation
 import Observation
 
 /// 全局应用状态：多服务器配置 + 登录态
+@MainActor
 @Observable
 final class AppState {
     let serverStore = ServerStore.shared
@@ -27,13 +28,14 @@ final class AppState {
             client = nil
             return
         }
-        client = APIClient(server: server)
-    }
-
-    /// JWT 登录成功
-    func sessionStarted() {
-        isSessionValid = true
-        rebuildClient()
+        let newClient = APIClient(server: server)
+        // 401 确认失效（refresh 失败 / AdminKey 无效）→ 全局登出回登录页
+        newClient.onSessionInvalid = { [weak self] in
+            Task { @MainActor in
+                self?.sessionEnded()
+            }
+        }
+        client = newClient
     }
 
     /// 登出 / Token 失效
@@ -45,18 +47,16 @@ final class AppState {
         rebuildClient()
     }
 
-    /// 切换服务器
+    /// 切换服务器（activeServer 的 didSet 已重建 client，无需再显式调用）
     func switchServer(_ server: ServerConfig) {
         serverStore.setActive(server)
         activeServer = server
         isSessionValid = server.isAuthenticated
-        rebuildClient()
     }
 
-    /// 服务器配置更新后刷新
+    /// 服务器配置更新后刷新；被删除的活跃服务器置空（触发登出态）
     func refreshServer() {
-        if let server = serverStore.server(id: activeServer?.id) {
-            activeServer = server
-        }
+        activeServer = serverStore.server(id: activeServer?.id)
+        isSessionValid = activeServer?.isAuthenticated ?? false
     }
 }

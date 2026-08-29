@@ -134,6 +134,7 @@ struct SettingsView: View {
     }
 }
 
+@MainActor
 @Observable
 final class SettingsViewModel {
     var servers: [ServerConfig] = ServerStore.shared.servers

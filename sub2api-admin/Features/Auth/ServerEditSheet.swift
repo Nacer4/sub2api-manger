@@ -35,10 +35,14 @@ struct ServerEditSheet: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("保存") {
+                        // 规范化地址：去掉首尾空白与尾部斜杠，避免拼接出双斜杠路径
+                        server.baseURL = server.baseURL
+                            .trimmingCharacters(in: .whitespacesAndNewlines)
+                            .replacingOccurrences(of: "/+$", with: "", options: .regularExpression)
                         onSave(server)
                         dismiss()
                     }
-                    .disabled(server.baseURL.isEmpty)
+                    .disabled(server.baseURL.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
             }
         }

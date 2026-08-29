@@ -115,6 +115,7 @@ struct AccountDetailView: View {
     }
 }
 
+@MainActor
 @Observable
 final class AccountDetailViewModel {
     var account: Account?
@@ -173,13 +174,16 @@ final class AccountDetailViewModel {
 
     func setSchedulable(_ value: Bool) async {
         guard let client, let account else { return }
+        // 乐观更新：先切 UI，失败再回滚（避免 Toggle 回弹闪烁）
+        let original = account.schedulable
+        account?.schedulable = value
         do {
             struct Body: Encodable { let schedulable: Bool }
             let _: EmptyData = try await client.request(
                 "POST", "/admin/accounts/\(account.id)/schedulable", body: Body(schedulable: value)
             )
-            self.account?.schedulable = value
         } catch {
+            self.account?.schedulable = original
             resultMessage = "设置失败：\(error.localizedDescription)"
             showResult = true
         }

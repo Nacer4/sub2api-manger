@@ -709,7 +709,7 @@ $$('[data-count]').forEach(el=>{
   const target=+el.dataset.count.replace(/[M$]/g,''), dec=+(el.dataset.dec||0), pre=el.dataset.prefix||'', suf=el.dataset.count.includes('M')?'M':'';
   const t0=performance.now();
   (function f(t){const p=Math.min(1,(t-t0)/1100), e=1-Math.pow(1-p,3);
-    el.textContent=pre+Math.floor(target*e).toLocaleString('en-US')+suf;
+    el.textContent=pre+(target*e).toFixed(dec).toLocaleString('en-US')+suf;
     if(p<1)requestAnimationFrame(f);})(t0);
 });
 
@@ -736,7 +736,7 @@ function drawChart(){
     <style>@keyframes draw{to{stroke-dashoffset:0}}</style>`;
   const cross=svg.querySelector('#cross'),pt=svg.querySelector('#pt'),tip=$('#tip');
   const move=e=>{
-    const r=svg.getBoundingClientRect(),x=(e.touches?e.touches[0].clientX:e.clientX-r.left)/r.width*W;
+    const r=svg.getBoundingClientRect(),cx=(e.touches?e.touches[0].clientX:e.clientX)-r.left,x=cx/r.width*W;
     const i=Math.max(0,Math.min(47,Math.round((x-PL)/(W-PL*2)*47))),p=pts[i];
     cross.setAttribute('x1',p[0]);cross.setAttribute('x2',p[0]);cross.style.opacity=1;
     pt.setAttribute('cx',p[0]);pt.setAttribute('cy',p[1]);pt.style.opacity=1;
@@ -880,7 +880,6 @@ function renderAcct(){
   const bar=$('#batch-bar');
   if(selectMode&&sel.size){bar.classList.add('show'); $('#b-cnt').textContent=sel.size;}
   else bar.classList.remove('show');
-  $('#tab-badge').textContent=accounts.filter(a=>a.status==='error').length;
 }
 $('#btn-select').onclick=()=>{
   selectMode=!selectMode; if(!selectMode)sel.clear();
@@ -889,8 +888,8 @@ $('#btn-select').onclick=()=>{
 };
 $('#acct-list').onclick=e=>{
   const card=e.target.closest('.acct-card'),sw=e.target.closest('[data-sw]');
-  if(sw){const a=accounts.find(x=>x.id===+sw.dataset.sw);a.sched=!a.sched;
-    sw.classList.toggle('on'); toast(`${a.name} 调度已${a.sched?'开启':'关闭'}`); return;}
+  if(sw){const a=accounts.find(x=>x.id===+sw.dataset.sw); if(!a)return;
+    a.sched=!a.sched; sw.classList.toggle('on'); toast(`${a.name} 调度已${a.sched?'开启':'关闭'}`); return;}
   if(card&&selectMode){const id=+card.dataset.id; sel.has(id)?sel.delete(id):sel.add(id);
     $('#acct-title').textContent=`已选 ${sel.size}`; renderAcct();}
 };
@@ -907,7 +906,7 @@ $$('#auth-chips .chip').forEach(c=>c.onclick=()=>{
 let st; $('#acct-search').oninput=e=>{clearTimeout(st); st=setTimeout(()=>{kw=e.target.value.trim(); renderAcct();},350)};
 
 /* 批量确认 Sheet */
-let pending=null;
+let pending=null, batchIv=null;
 $$('#batch-bar .bact').forEach(b=>b.onclick=()=>{
   const k=b.dataset.b,m=BATCHES[k];
   const names=[...sel].map(id=>accounts.find(a=>a.id===id)).filter(Boolean).map(a=>a.name);
@@ -915,18 +914,21 @@ $$('#batch-bar .bact').forEach(b=>b.onclick=()=>{
   $('#sh-title').textContent=m.t;
   $('#sh-desc').textContent=`将对 ${sel.size} 个账号执行该操作。`+(m.d?' 该操作不可恢复。':'');
   $('#sh-prev').innerHTML=names.slice(0,5).map(n=>`<div>${n}</div>`).join('')+(names.length>5?`<div class="more">…及其他 ${names.length-5} 个</div>`:'');
-  $('#sh-go').className='btn '+(m.d?'danger':'primary');
+  $('#sh-go').className='btn '+(m.d?'danger':'primary'); $('#sh-go').disabled=false;
   $('#sh-prog').classList.remove('show'); $('#sh-prog i').style.width='0';
   $('#ov').classList.add('show'); $('#sh-batch').classList.add('show');
 });
-function closeSheets(){$('#ov').classList.remove('show');$$('.sheet').forEach(s=>s.classList.remove('show'))}
+function closeSheets(){$('#ov').classList.remove('show');$$('.sheet').forEach(s=>s.classList.remove('show'));
+  if(batchIv){clearInterval(batchIv); batchIv=null;} $('#sh-go').disabled=false;}
 $('#sh-cancel').onclick=closeSheets; $('#ov').onclick=closeSheets;
 $('#sh-go').onclick=()=>{
   if(!pending)return; const{ids,key,title,dang}=pending;
+  if(batchIv)clearInterval(batchIv);
   $('#sh-go').disabled=true; const pr=$('#sh-prog'); pr.classList.add('show');
-  let p=0; const iv=setInterval(()=>{p+=Math.random()*32; pr.querySelector('i').style.width=Math.min(100,p)+'%';
-    if(p>=100){clearInterval(iv); closeSheets(); $('#sh-go').disabled=false;
-      if(key==='batch-delete'){ids.forEach(id=>{const i=accounts.findIndex(a=>a.id===id);if(i>-1)accounts.splice(i,1)}); sel.clear();}
+  let p=0; batchIv=setInterval(()=>{p+=Math.random()*32; pr.querySelector('i').style.width=Math.min(100,p)+'%';
+    if(p>=100){clearInterval(batchIv); batchIv=null; closeSheets();
+      if(key==='batch-delete'){ids.forEach(id=>{const i=accounts.findIndex(a=>a.id===id);if(i>-1)accounts.splice(i,1)}); sel.clear();
+        $('#acct-title').textContent=selectMode?`已选 ${sel.size}`:'账号管理';}
       else if(key==='batch-clear-error')ids.forEach(id=>{const a=accounts.find(x=>x.id===id); if(a)a.status='active'});
       renderAcct(); toast(`「${title}」已完成（${ids.length} 个）`);}
   },240);
@@ -1013,6 +1015,7 @@ let et; $('#e-search').oninput=e=>{clearTimeout(et); et=setTimeout(()=>{eF.q=e.t
 $('#log-tabs').addEventListener('segchange',e=>{
   $('#tab-usage').style.display=e.detail.t==='usage'?'block':'none';
   $('#tab-errors').style.display=e.detail.t==='errors'?'block':'none';
+  window.dispatchEvent(new Event('resize'));
 });
 
 /* ============ 新增账号（OAuth 授权流 / API Key） ============ */
@@ -1038,7 +1041,7 @@ $('#na-genurl').onclick=()=>{
 $('#na-save').onclick=()=>{
   if(naAuth==='oauth'&&!$('#na-code').value.trim()){toast('请粘贴回跳链接或授权码','err'); return;}
   if(naAuth==='api_key'&&!$('#na-apikey').value.trim()){toast('API Key 不能为空','err'); return;}
-  const id=Math.max(...accounts.map(a=>a.id))+1;
+  const id=Math.max(0,...accounts.map(a=>a.id))+1;
   accounts.unshift({id,name:`${naPlat}-pool-${String(accounts.length+1).padStart(2,'0')}`,plat:naPlat,
     status:'active',tier:'free',auth:naAuth,req:0,sched:true,last:'刚刚'});
   closeSheets(); renderAcct();
@@ -1169,7 +1172,7 @@ function openPush(err){
     const onBtn=seg.querySelector('button.on'), segPill=seg.querySelector('.pill');
     if(onBtn&&segPill){segPill.style.width=onBtn.offsetWidth+'px'; segPill.style.left=onBtn.offsetLeft-3+'px';}
     $('#tab-usage').style.display='block'; $('#tab-errors').style.display='none';
-    uF={uid:'',aid:'',rid:err.rid,stream:'',model:'',time:''}; syncSeg('#u-time',''); renderUsage();
+    uF={uid:'',aid:'',rid:err.rid,stream:'',model:'',time:''}; $('#u-search').value=''; syncSeg('#u-time',''); syncSeg('#u-stream',''); renderUsage();
     toast(`已按 Request ID 联动筛选`);
   };
 }

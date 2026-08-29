@@ -4,7 +4,8 @@ import Foundation
 
 struct APIEnvelope<T: Decodable>: Decodable {
     let code: Int
-    let message: String
+    /// 部分接口只返回 { code, data }，message 为可选避免整体解码失败
+    let message: String?
     let data: T?
 }
 

@@ -101,6 +101,7 @@ struct UserRow: View {
     }
 }
 
+@MainActor
 @Observable
 final class UserListViewModel {
     var users: [User] = []
@@ -138,11 +139,14 @@ final class UserListViewModel {
     func loadMore() async {
         guard canLoadMore else { return }
         query.page += 1
-        await loadPage()
+        // 失败回退页码，避免下次加载跳过整页数据
+        let ok = await loadPage()
+        if !ok { query.page -= 1 }
     }
 
-    private func loadPage() async {
-        guard let client else { return }
+    @discardableResult
+    private func loadPage() async -> Bool {
+        guard let client else { return false }
         isLoading = true
         defer { isLoading = false }
 
@@ -157,10 +161,11 @@ final class UserListViewModel {
             if query.page == 1 { users = page.items } else { users += page.items }
             reachedEnd = users.count >= page.total
             error = nil
+            return true
         } catch {
-            // 加载更多失败不清空已有数据
-            if users.isEmpty { self.error = error }
-            else { self.error = error }
+            // 加载更多失败不清空已有数据，仅记录错误
+            self.error = error
+            return false
         }
     }
 

@@ -62,7 +62,13 @@ struct BalanceAdjustSheet: View {
     }
 
     private func submit() async {
-        guard let client = AppStateHolder.shared.client, let amount = Double(amountText) else { return }
+        guard let client = AppStateHolder.shared.client else { return }
+        // 金额非法时给出提示而非静默失败
+        guard let amount = Double(amountText) else {
+            errorMessage = "金额格式不正确，请输入数字（如 10 或 10.5）"
+            showError = true
+            return
+        }
         isSubmitting = true
         defer { isSubmitting = false }
 

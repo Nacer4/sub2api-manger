@@ -885,6 +885,7 @@ struct RequestErrorDetailView: View {
     }
 }
 
+@MainActor
 @Observable
 final class RequestErrorDetailViewModel {
     var detail: RequestErrorDetail?
@@ -928,6 +929,7 @@ final class RequestErrorDetailViewModel {
 
 // MARK: - ViewModels
 
+@MainActor
 @Observable
 final class UsageLogsViewModel {
     var logs: [UsageLog] = []
@@ -953,8 +955,13 @@ final class UsageLogsViewModel {
     }
 
     func applyFilter(_ newFilter: UsageFilter) {
+        // onChange(of: filter.timeWindow) 已负责时间窗变化时的 reload；
+        // 此处仅在时间窗未变时自行触发，避免一次「应用」产生两个并发 reload 竞态
+        let timeWindowChanged = filter.timeWindow != newFilter.timeWindow
         filter = newFilter
-        Task { await reload() }
+        if !timeWindowChanged {
+            Task { await reload() }
+        }
     }
 
     func reload() async {
@@ -969,11 +976,14 @@ final class UsageLogsViewModel {
     func loadMore() async {
         guard !reachedEnd, !isLoading else { return }
         query.page += 1
-        await loadPage()
+        // 失败回退页码，避免下次加载跳过整页数据
+        let ok = await loadPage()
+        if !ok { query.page -= 1 }
     }
 
-    private func loadPage() async {
-        guard let client else { return }
+    @discardableResult
+    private func loadPage() async -> Bool {
+        guard let client else { return false }
         isLoading = true
         defer { isLoading = false }
 
@@ -1001,8 +1011,10 @@ final class UsageLogsViewModel {
             if query.page == 1 { logs = page.items } else { logs += page.items }
             reachedEnd = logs.count >= page.total
             error = nil
+            return true
         } catch {
             self.error = error
+            return false
         }
     }
 
@@ -1016,6 +1028,7 @@ final class UsageLogsViewModel {
     }
 }
 
+@MainActor
 @Observable
 final class RequestErrorsViewModel {
     var logs: [RequestErrorLog] = []
@@ -1055,11 +1068,14 @@ final class RequestErrorsViewModel {
     func loadMore() async {
         guard !reachedEnd, !isLoading else { return }
         query.page += 1
-        await loadPage()
+        // 失败回退页码，避免下次加载跳过整页数据
+        let ok = await loadPage()
+        if !ok { query.page -= 1 }
     }
 
-    private func loadPage() async {
-        guard let client else { return }
+    @discardableResult
+    private func loadPage() async -> Bool {
+        guard let client else { return false }
         isLoading = true
         defer { isLoading = false }
 
@@ -1073,8 +1089,10 @@ final class RequestErrorsViewModel {
             if query.page == 1 { logs = page.items } else { logs += page.items }
             reachedEnd = logs.count >= page.total
             error = nil
+            return true
         } catch {
             self.error = error
+            return false
         }
     }
 

@@ -158,6 +158,7 @@ struct DashboardView: View {
     }
 }
 
+@MainActor
 @Observable
 final class DashboardViewModel {
     enum TrendMetric: String, CaseIterable, Identifiable {
@@ -191,7 +192,7 @@ final class DashboardViewModel {
 
     private var client: APIClient? { AppStateHolder.shared.client }
 
-    private func fetch<T: Decodable>(_ path: String) async -> T? {
+    private func fetch<T: Decodable>(_ client: APIClient?, _ path: String) async -> T? {
         guard let client else { return nil }
         return try? client.request("GET", path) as T
     }
@@ -201,14 +202,17 @@ final class DashboardViewModel {
         error = nil
         defer { isLoading = false }
 
-        async let snap: DashboardSnapshot? = fetch("/admin/dashboard/snapshot-v2")
-        async let stats: DashboardSnapshot? = fetch("/admin/dashboard/stats")
-        async let trendData: [TrendPoint]? = fetch("/admin/dashboard/trend")
-        async let ranking: [UserRankingEntry]? = fetch("/admin/dashboard/users-ranking")
-        async let models: [ModelStatsEntry]? = fetch("/admin/dashboard/models")
+        // 先取 client 值再并发请求，避免捕获期间切换服务器导致的引用不一致
+        let client = self.client
+        async let snap: DashboardSnapshot? = fetch(client, "/admin/dashboard/snapshot-v2")
+        async let stats: DashboardSnapshot? = fetch(client, "/admin/dashboard/stats")
+        async let trendData: [TrendPoint]? = fetch(client, "/admin/dashboard/trend")
+        async let ranking: [UserRankingEntry]? = fetch(client, "/admin/dashboard/users-ranking")
+        async let models: [ModelStatsEntry]? = fetch(client, "/admin/dashboard/models")
 
         self.snapshot = (await snap) ?? (await stats)
-        if let t = await trendData, !t.isEmpty { self.trend = t }
+        // 无条件覆盖：避免接口失败/空结果时残留旧数据导致 failures 统计失真
+        self.trend = await trendData ?? []
         if let r = await ranking { self.userRanking = r }
         if let m = await models { self.modelStats = m }
 

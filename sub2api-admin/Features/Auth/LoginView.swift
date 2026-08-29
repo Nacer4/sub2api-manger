@@ -144,6 +144,7 @@ struct LoginView: View {
     }
 }
 
+@MainActor
 @Observable
 final class LoginViewModel {
     var servers: [ServerConfig] = ServerStore.shared.servers
@@ -238,10 +239,10 @@ final class LoginViewModel {
             case .adminKey:
                 server.authMode = .adminKey
                 server.adminKey = adminKey
-                ServerStore.shared.upsert(server)
-                // 立即验证 Key 有效性
+                // 先验证 Key 有效性，通过后再持久化（避免无效 Key 落盘导致下次启动直进主界面）
                 let client = APIClient(server: server)
                 let _: DashboardSnapshot = try await client.request("GET", "/admin/dashboard/stats")
+                ServerStore.shared.upsert(server)
             }
             appState.switchServer(server)
         } catch {

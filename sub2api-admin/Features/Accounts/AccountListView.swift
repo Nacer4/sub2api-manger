@@ -473,6 +473,7 @@ struct BatchConfirmSheet: View {    @Environment(\.dismiss) private var dismiss
     }
 }
 
+@MainActor
 @Observable
 final class AccountListViewModel {
     var accounts: [Account] = []
@@ -585,17 +586,26 @@ final class AccountListViewModel {
             var finalCredential = credential
             if authType == "oauth" {
                 // OAuth：先交换授权码（POST /admin/{platform}/oauth/exchange-code）
+                // 交换失败直接终止，不拿授权码冒充 API Key 去创建
                 struct ExchangeBody: Encodable { let code: String }
                 struct ExchangeResp: Decodable {
-                    let apiKey: String?; let api_key: String?
+                    let apiKey: String?
                     let accessToken: String?
+                    enum CodingKeys: String, CodingKey {
+                        case apiKey = "api_key"
+                        case accessToken = "access_token"
+                    }
                 }
-                if let resp: ExchangeResp = try? await client.request(
+                let resp: ExchangeResp = try await client.request(
                     "POST", "/admin/\(platform)/oauth/exchange-code",
                     body: ExchangeBody(code: credential)
-                ) {
-                    finalCredential = resp.apiKey ?? resp.api_key ?? resp.accessToken ?? credential
+                )
+                guard let exchanged = resp.apiKey ?? resp.accessToken else {
+                    batchResultMessage = "交换失败：授权码未返回凭证，请重试或改用 API Key。"
+                    showBatchResult = true
+                    return
                 }
+                finalCredential = exchanged
             }
             struct Body: Encodable {
                 let name: String
@@ -640,11 +650,14 @@ final class AccountListViewModel {
     func loadMore() async {
         guard !reachedEnd, !isLoading else { return }
         query.page += 1
-        await loadPage()
+        // 失败回退页码，避免下次加载跳过整页数据
+        let ok = await loadPage()
+        if !ok { query.page -= 1 }
     }
 
-    private func loadPage() async {
-        guard let client else { return }
+    @discardableResult
+    private func loadPage() async -> Bool {
+        guard let client else { return false }
         isLoading = true
         defer { isLoading = false }
 
@@ -661,8 +674,10 @@ final class AccountListViewModel {
             if query.page == 1 { accounts = page.items } else { accounts += page.items }
             reachedEnd = accounts.count >= page.total
             error = nil
+            return true
         } catch {
             self.error = error
+            return false
         }
     }
 
