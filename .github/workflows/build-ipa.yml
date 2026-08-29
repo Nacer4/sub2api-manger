@@ -1,0 +1,48 @@
+name: Build iOS IPA
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-14
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Show Xcode version
+        run: xcodebuild -version
+
+      - name: Archive (no code signing)
+        run: |
+          xcodebuild archive \
+            -project Sub2Admin.xcodeproj \
+            -scheme Sub2Admin \
+            -destination 'generic/platform=iOS' \
+            -archivePath build/Sub2Admin.xcarchive \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGN_ENTITLEMENTS=""
+
+      - name: Package unsigned IPA
+        run: |
+          mkdir -p build/Payload
+          cp -R "build/Sub2Admin.xcarchive/Products/Applications/Sub2Admin.app" build/Payload/
+          cd build
+          zip -r Sub2Admin-unsigned.ipa Payload
+          ls -lh Sub2Admin-unsigned.ipa
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Sub2Admin-IPA
+          path: build/Sub2Admin-unsigned.ipa
