@@ -28,3 +28,12 @@ targets:
           NSAllowsArbitraryLoads: true
         CFBundleDisplayName: Sub2Admin
         CFBundleShortVersionString: "0.1.0"
+schemes:
+  Sub2Admin:
+    build:
+      targets:
+        Sub2Admin: all
+    run:
+      config: Debug
+    archive:
+      config: Release
