@@ -211,7 +211,7 @@ final class UserDetailViewModel {
     }
 
     func toggleStatus() async {
-        guard let client, let current = user else { return }
+        guard let client, var current = user else { return }
         let newStatus = current.status == "active" ? "disabled" : "active"
         do {
             struct UpdateBody: Encodable { let status: String }

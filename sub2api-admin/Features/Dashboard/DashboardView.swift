@@ -194,7 +194,7 @@ final class DashboardViewModel {
 
     private func fetch<T: Decodable>(_ client: APIClient?, _ path: String) async -> T? {
         guard let client else { return nil }
-        return try? client.request("GET", path) as T
+        return try? await client.request("GET", path) as T
     }
 
     func loadAll() async {

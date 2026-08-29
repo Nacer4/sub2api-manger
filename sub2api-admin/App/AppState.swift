@@ -42,7 +42,7 @@ final class AppState {
     func sessionEnded() {
         isSessionValid = false
         if let id = activeServer?.id {
-            try? TokenStore.shared.clear(serverId: id)
+            TokenStore.shared.clear(serverId: id.uuidString)
         }
         rebuildClient()
     }

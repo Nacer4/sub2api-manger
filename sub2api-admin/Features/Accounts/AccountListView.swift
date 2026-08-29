@@ -193,12 +193,15 @@ struct AccountRow: View {
         account.rateMultiplier.map { "\($0)x" }
     }
 
+    private static let expiresFmt: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy/MM/dd HH:mm:ss"
+        return f
+    }()
+
     private var expiresText: String? {
         guard let ts = account.expiresAt, ts > 0 else { return "-" }
-        return Date(timeIntervalSince1970: TimeInterval(ts))
-            .formatted(.verbatim(year: .defaultDigits, month: .twoDigits, day: .twoDigits,
-                                 hour: .twoDigits, minute: .twoDigits, second: .twoDigits,
-                                 timeZoneName: .localizedGMT))
+        return Self.expiresFmt.string(from: Date(timeIntervalSince1970: TimeInterval(ts)))
     }
 
     private var schedRow: some View {
