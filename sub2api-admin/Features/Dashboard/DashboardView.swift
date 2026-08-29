@@ -210,7 +210,9 @@ final class DashboardViewModel {
         async let ranking: [UserRankingEntry]? = fetch(client, "/admin/dashboard/users-ranking")
         async let models: [ModelStatsEntry]? = fetch(client, "/admin/dashboard/models")
 
-        self.snapshot = (await snap) ?? (await stats)
+        let s = await snap
+        let fallback = await stats
+        self.snapshot = s ?? fallback
         // 无条件覆盖：避免接口失败/空结果时残留旧数据导致 failures 统计失真
         self.trend = await trendData ?? []
         if let r = await ranking { self.userRanking = r }

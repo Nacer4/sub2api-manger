@@ -143,7 +143,7 @@ struct RequestErrorLog: Decodable, Identifiable, Hashable {
     let userAgent: String?
 
     enum CodingKeys: String, CodingKey {
-        case id, phase, type, platform, model, resolved, message, stream
+        case id, phase, type, platform, model, resolved, message, stream, severity
         case createdAt = "created_at"
         case errorOwner = "error_owner"
         case errorSource = "error_source"
