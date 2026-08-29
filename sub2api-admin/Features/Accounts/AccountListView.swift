@@ -1,15 +1,12 @@
 import SwiftUI
 
-/// 账号管理：分页 + 平台/状态/等级/认证筛选 + 多选批量操作 + 新增账号 + 分组管理
+/// 账号管理（简化）：分组/认证筛选 + 简单信息展示 + 调度开关
 struct AccountListView: View {
     @State private var viewModel = AccountListViewModel()
 
     var body: some View {
         NavigationStack {
             List {
-            if viewModel.isSelecting {
-                selectionSection
-            }
             filterSection
             if let error = viewModel.error, viewModel.accounts.isEmpty {
                 ErrorStateView(error: error) {
@@ -20,23 +17,13 @@ struct AccountListView: View {
                 EmptyStateView(text: "暂无账号")
             } else {
                 ForEach(viewModel.accounts) { account in
-                    if viewModel.isSelecting {
-                        Button {
-                            viewModel.toggleSelection(account)
-                        } label: {
-                            HStack {
-                                Image(systemName: viewModel.isSelected(account)
-                                      ? "checkmark.circle.fill" : "circle")
-                                    .foregroundStyle(viewModel.isSelected(account) ? .tint : .secondary)
-                                AccountRow(account: account)
-                            }
-                        }
-                        .tint(.primary)
-                    } else {
-                        NavigationLink(value: account) {
-                            AccountRow(account: account)
-                        }
+                    AccountRow(
+                        account: account,
+                        groupName: viewModel.groupName(for: account)
+                    ) { newValue in
+                        Task { await viewModel.setSchedulable(account, value: newValue) }
                     }
+                    .listRowSeparator(.hidden)
                 }
                 LoadMoreFooter(
                     isLoading: viewModel.isLoading,
@@ -50,70 +37,21 @@ struct AccountListView: View {
         .onChange(of: viewModel.searchText) { _, _ in
             viewModel.debouncedSearch()
         }
-        .navigationDestination(for: Account.self) { account in
-            AccountDetailView(accountId: account.id)
-        }
         .refreshable { await viewModel.reload() }
         .task { await viewModel.reloadIfNeeded() }
         .toolbar {
-            if viewModel.isSelecting {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button("取消") { viewModel.exitSelection() }
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Text("已选 \(viewModel.selectedIds.count)")
-                        .font(.subheadline.monospacedDigit())
-                        .foregroundStyle(.secondary)
-                }
-            } else {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        viewModel.showAddSheet = true
-                    } label: {
-                        Label("新增", systemImage: "plus")
-                    }
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    NavigationLink {
-                        GroupListView()
-                    } label: {
-                        Label("分组", systemImage: "square.stack.3d.up")
-                    }
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        viewModel.enterSelection()
-                    } label: {
-                        Label("选择", systemImage: "checkmark.circle")
-                    }
+            ToolbarItem(placement: .topBarTrailing) {
+                NavigationLink {
+                    GroupListView()
+                } label: {
+                    Label("分组", systemImage: "square.stack.3d.up")
                 }
             }
         }
-        .sheet(isPresented: $viewModel.showAddSheet) {
-            AccountAddSheet { name, platform, authType, credential in
-                Task {
-                    await viewModel.createAccount(
-                        name: name, platform: platform, authType: authType, credential: credential
-                    )
-                }
-            }
-        }
-        .sheet(isPresented: $viewModel.showBatchSheet) {
-            if let action = viewModel.pendingBatchAction {
-                BatchConfirmSheet(
-                    action: action,
-                    count: viewModel.selectedIds.count,
-                    previewNames: viewModel.selectedPreviewNames,
-                    onConfirm: {
-                        Task { await viewModel.runBatch(action) }
-                    }
-                )
-            }
-        }
-        .alert("批量操作", isPresented: $viewModel.showBatchResult) {
+        .alert("提示", isPresented: $viewModel.showError) {
             Button("好", role: .cancel) {}
         } message: {
-            Text(viewModel.batchResultMessage)
+            Text(viewModel.errorMessage)
         }
         .overlay {
             if viewModel.isLoading, viewModel.accounts.isEmpty {
@@ -125,39 +63,18 @@ struct AccountListView: View {
 
     private var filterSection: some View {
         Section {
-            Picker("平台", selection: $viewModel.platformFilter) {
-                Text("全部").tag("")
-                ForEach(viewModel.platforms, id: \.self) { platform in
-                    Text(platform.capitalized).tag(platform)
+            Picker("分组", selection: $viewModel.groupFilter) {
+                Text("全部分组").tag(Int?.none)
+                ForEach(viewModel.groups) { group in
+                    Text(group.name ?? "#\(group.id)").tag(Int?.some(group.id))
                 }
             }
-            .onChange(of: viewModel.platformFilter) { _, _ in
-                Task { await viewModel.reload() }
-            }
-
-            Picker("状态", selection: $viewModel.statusFilter) {
-                Text("全部").tag("")
-                Text("active").tag("active")
-                Text("error").tag("error")
-                Text("rate_limited").tag("rate_limited")
-                Text("expired").tag("expired")
-            }
-            .onChange(of: viewModel.statusFilter) { _, _ in
-                Task { await viewModel.reload() }
-            }
-
-            Picker("等级", selection: $viewModel.tierFilter) {
-                Text("全部").tag("")
-                ForEach(viewModel.tiers, id: \.self) { tier in
-                    Text(tier).tag(tier)
-                }
-            }
-            .onChange(of: viewModel.tierFilter) { _, _ in
+            .onChange(of: viewModel.groupFilter) { _, _ in
                 Task { await viewModel.reload() }
             }
 
             Picker("认证方式", selection: $viewModel.authFilter) {
-                Text("全部").tag("")
+                Text("全部认证").tag("")
                 ForEach(viewModel.authTypes, id: \.self) { auth in
                     Text(auth).tag(auth)
                 }
@@ -167,72 +84,53 @@ struct AccountListView: View {
             }
         }
     }
-
-    private var selectionSection: some View {
-        Section {
-            ForEach(AccountBatchAction.allCases) { action in
-                Button {
-                    viewModel.pendingBatchAction = action
-                    viewModel.showBatchSheet = true
-                } label: {
-                    Label(action.title, systemImage: action.symbol)
-                        .foregroundStyle(action.isDestructive ? .red : .primary)
-                }
-                .disabled(viewModel.selectedIds.isEmpty)
-            }
-
-            Button {
-                viewModel.selectAll()
-            } label: {
-                Label("全选当前页", systemImage: "checkmark.circle.2")
-            }
-            .disabled(viewModel.accounts.isEmpty)
-
-            Button(role: .destructive) {
-                viewModel.selectedIds.removeAll()
-            } label: {
-                Label("清空选择", systemImage: "eraser")
-            }
-            .disabled(viewModel.selectedIds.isEmpty)
-        } header: {
-            Text("批量操作")
-        } footer: {
-            Text("勾选账号后执行。批量删除不可恢复。")
-        }
-    }
 }
 
 struct AccountRow: View {
     let account: Account
+    let groupName: String?
+    let onToggleSchedulable: (Bool) -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack {
-                Image(systemName: platformSymbol)
-                    .foregroundStyle(.tint)
-                Text(account.name ?? "账号 #\(account.id)")
-                    .font(.subheadline.weight(.medium))
-                Spacer()
-                StatusPill(account.status)
+        HStack(alignment: .center, spacing: 12) {
+            Image(systemName: platformSymbol)
+                .font(.title3)
+                .foregroundStyle(.tint)
+                .frame(width: 28)
+
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 6) {
+                    Text(account.name ?? "账号 #\(account.id)")
+                        .font(.subheadline.weight(.medium))
+                        .lineLimit(1)
+                    StatusPill(account.status)
+                }
+                HStack(spacing: 4) {
+                    Text(account.platform?.uppercased() ?? "-")
+                    if let authType = account.authType {
+                        Text("· \(authType)")
+                    }
+                    if let tier = account.tier, !tier.isEmpty {
+                        Text("· \(tier)")
+                            .foregroundStyle(.tint)
+                    }
+                    if let groupName {
+                        Text("· \(groupName)")
+                            .foregroundStyle(.tint)
+                    }
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
             }
-            HStack {
-                Text(account.platform ?? "-")
-                    .textCase(.uppercase)
-                if let authType = account.authType {
-                    Text("· \(authType)")
-                }
-                if let tier = account.tier, !tier.isEmpty {
-                    Text("· \(tier)")
-                        .foregroundStyle(.tint)
-                }
-                if account.schedulable == false {
-                    Text("· 不可调度")
-                }
-                Spacer()
-                Text(Fmt.date(account.lastUsedAt))
-            }
-            .font(.caption)
-            .foregroundStyle(.secondary)
+
+            Spacer()
+
+            Toggle("", isOn: Binding(
+                get: { account.schedulable ?? true },
+                set: onToggleSchedulable
+            ))
+            .labelsHidden()
+            .tint(.accentColor)
         }
         .padding(.vertical, 2)
     }
@@ -249,230 +147,6 @@ struct AccountRow: View {
     }
 }
 
-/// 新增账号 Sheet（对标 sub2api 官方 dashboard：OAuth 授权流 / API Key 两种方式）
-/// OAuth：生成授权链接（POST /admin/{platform}/oauth/auth-url）→ 浏览器完成授权 → 粘贴回跳码交换
-/// API Key：直填 key 创建（POST /admin/accounts）
-struct AccountAddSheet: View {
-    @Environment(\.dismiss) private var dismiss
-
-    @State private var name = ""
-    @State private var platform = "claude"
-    @State private var authType = "api_key"
-    @State private var apiKey = ""
-    @State private var proxy = ""
-    @State private var oauthURL = ""
-    @State private var oauthCode = ""
-    @State private var isGeneratingURL = false
-    @State private var isSaving = false
-
-    let onCreate: (_ name: String, _ platform: String, _ authType: String, _ credential: String) -> Void
-
-    private let platforms = ["claude", "openai", "gemini", "antigravity", "grok"]
-    private var isOAuth: Bool { authType == "oauth" }
-
-    var body: some View {
-        NavigationStack {
-            Form {
-                Section("基本信息") {
-                    TextField("名称（必填）", text: $name)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                    Picker("平台", selection: $platform) {
-                        ForEach(platforms, id: \.self) { Text($0).tag($0) }
-                    }
-                }
-
-                Section {
-                    Picker("认证方式", selection: $authType) {
-                        Text("API Key").tag("api_key")
-                        Text("OAuth").tag("oauth")
-                    }
-                    .pickerStyle(.segmented)
-                    .listRowBackground(Color.clear)
-
-                    if isOAuth {
-                        // OAuth 两步：生成授权链接 → 粘贴回跳码
-                        VStack(alignment: .leading, spacing: 8) {
-                            Button {
-                                generateAuthURL()
-                            } label: {
-                                if isGeneratingURL {
-                                    HStack { ProgressView(); Text("生成中…") }
-                                } else {
-                                    Label("生成 OAuth 授权链接", systemImage: "link")
-                                }
-                            }
-                            .disabled(isGeneratingURL || isSaving)
-
-                            if !oauthURL.isEmpty {
-                                Text(oauthURL)
-                                    .font(.caption.monospaced())
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(3)
-                                    .textSelection(.enabled)
-                            }
-
-                            TextField("粘贴回跳链接或授权码", text: $oauthCode)
-                                .font(.caption.monospaced())
-                                .textInputAutocapitalization(.never)
-                                .autocorrectionDisabled()
-                        }
-                    } else {
-                        TextField("API Key（sk-…）", text: $apiKey)
-                            .font(.body.monospaced())
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled()
-                        TextField("代理（可选）", text: $proxy)
-                            .font(.caption.monospaced())
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled()
-                    }
-                } header: {
-                    Text("认证")
-                } footer: {
-                    Text(isOAuth
-                         ? "先生成授权链接并在浏览器完成授权，再粘贴回跳链接或授权码。"
-                         : "API Key 将以密文存储，保存后不可查看。")
-                }
-            }
-            .navigationTitle("新增账号")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("取消") { dismiss() }
-                        .disabled(isSaving)
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("保存") {
-                        isSaving = true
-                        let credential = isOAuth
-                            ? oauthCode.trimmingCharacters(in: .whitespaces)
-                            : apiKey.trimmingCharacters(in: .whitespaces)
-                        onCreate(name.trimmingCharacters(in: .whitespaces), platform, authType, credential)
-                        isSaving = false
-                        dismiss()
-                    }
-                    .disabled(!canSave || isSaving)
-                }
-            }
-        }
-        .presentationDetents([.large])
-    }
-
-    private var canSave: Bool {
-        guard !name.trimmingCharacters(in: .whitespaces).isEmpty else { return false }
-        return isOAuth ? !oauthCode.trimmingCharacters(in: .whitespaces).isEmpty
-                       : !apiKey.trimmingCharacters(in: .whitespaces).isEmpty
-    }
-
-    /// 生成 OAuth 授权链接（POST /admin/{platform}/oauth/auth-url）
-    private func generateAuthURL() {
-        guard let client = AppStateHolder.shared.client else { return }
-        isGeneratingURL = true
-        Task {
-            defer { isGeneratingURL = false }
-            struct Body: Encodable { let platform: String }
-            struct Resp: Decodable { let authUrl: String?; let url: String?
-                enum CodingKeys: String, CodingKey {
-                    case authUrl = "auth_url", url
-                }
-            }
-            if let resp: Resp = try? await client.request(
-                "POST", "/admin/\(platform)/oauth/auth-url", body: Body(platform: platform)
-            ) {
-                oauthURL = resp.authUrl ?? resp.url ?? ""
-                if oauthURL.isEmpty { oauthURL = "授权链接为空，请检查服务端配置。" }
-            } else {
-                oauthURL = "生成失败：无法连接服务器。"
-            }
-        }
-    }
-}
-
-/// 批量操作确认弹窗（删除类操作红色确认 + 选中账号预览）
-struct BatchConfirmSheet: View {    @Environment(\.dismiss) private var dismiss
-    @State private var isRunning = false
-
-    let action: AccountBatchAction
-    let count: Int
-    let previewNames: [String]
-    let onConfirm: () async -> Void
-
-    var body: some View {
-        NavigationStack {
-            List {
-                Section {
-                    HStack {
-                        Image(systemName: action.symbol)
-                            .font(.title2)
-                            .foregroundStyle(action.isDestructive ? .red : .tint)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(action.title)
-                                .font(.headline)
-                            Text("将对 \(count) 个账号执行该操作。")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    if action.isDestructive {
-                        Label("该操作不可恢复。", systemImage: "exclamationmark.triangle.fill")
-                            .font(.footnote)
-                            .foregroundStyle(.red)
-                    }
-                }
-
-                if !previewNames.isEmpty {
-                    Section("选中账号（前 \(previewNames.count) 项）") {
-                        ForEach(previewNames, id: \.self) { name in
-                            Text(name)
-                                .font(.subheadline)
-                                .lineLimit(1)
-                        }
-                        if count > previewNames.count {
-                            Text("…及其他 \(count - previewNames.count) 个")
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                }
-
-                Section {
-                    Button {
-                        Task {
-                            isRunning = true
-                            await onConfirm()
-                            isRunning = false
-                            dismiss()
-                        }
-                    } label: {
-                        if isRunning {
-                            HStack {
-                                ProgressView()
-                                Text("执行中…")
-                            }
-                        } else {
-                            Text("确认执行")
-                                .frame(maxWidth: .infinity)
-                        }
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .tint(action.isDestructive ? .red : .accentColor)
-                    .listRowBackground(Color.clear)
-                    .disabled(isRunning)
-                }
-            }
-            .navigationTitle("确认")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("取消") { dismiss() }
-                }
-            }
-        }
-        .presentationDetents([.medium, .large])
-    }
-}
-
 @MainActor
 @Observable
 final class AccountListViewModel {
@@ -481,27 +155,13 @@ final class AccountListViewModel {
     var error: Error?
 
     var searchText = ""
-    var platformFilter = ""
-    var statusFilter = ""
-    var tierFilter = ""
+    var groupFilter: Int?
     var authFilter = ""
 
-    // 多选批量操作状态
-    var isSelecting = false
-    var selectedIds: Set<Int> = []
-    var showBatchSheet = false
-    var pendingBatchAction: AccountBatchAction?
-    var showBatchResult = false
-    var batchResultMessage = ""
+    var groups: [AccountGroup] = []
 
-    // 新增账号
-    var showAddSheet = false
-
-    /// 常见上游平台（作为筛选项）
-    let platforms = ["claude", "openai", "gemini", "antigravity", "grok", "kimi", "zhipu", "deepseek"]
-
-    /// 账号等级（与设计稿一致）
-    let tiers = ["free", "pro", "max5", "max20"]
+    var showError = false
+    var errorMessage = ""
 
     /// 认证方式
     let authTypes = ["oauth", "api_key"]
@@ -513,120 +173,30 @@ final class AccountListViewModel {
 
     private var client: APIClient? { AppStateHolder.shared.client }
 
-    // MARK: - 选择
+    // MARK: - 分组名称
 
-    func enterSelection() {
-        isSelecting = true
-        selectedIds.removeAll()
+    func groupName(for account: Account) -> String? {
+        guard let groupId = account.groupId else { return nil }
+        return groups.first { $0.id == groupId }?.name
     }
 
-    func exitSelection() {
-        isSelecting = false
-        selectedIds.removeAll()
-        pendingBatchAction = nil
-    }
+    // MARK: - 调度开关
 
-    func isSelected(_ account: Account) -> Bool {
-        selectedIds.contains(account.id)
-    }
-
-    func toggleSelection(_ account: Account) {
-        if selectedIds.contains(account.id) {
-            selectedIds.remove(account.id)
-        } else {
-            selectedIds.insert(account.id)
-        }
-    }
-
-    func selectAll() {
-        for account in accounts where !selectedIds.contains(account.id) {
-            selectedIds.insert(account.id)
-        }
-    }
-
-    /// 确认弹窗中的选中账号预览（当前页已加载的前 5 个名称）
-    var selectedPreviewNames: [String] {
-        accounts
-            .filter { selectedIds.contains($0.id) }
-            .prefix(5)
-            .map { $0.name ?? "账号 #\($0.id)" }
-    }
-
-    // MARK: - 批量操作
-
-    func runBatch(_ action: AccountBatchAction) async {
-        guard let client, !selectedIds.isEmpty else { return }
+    /// 乐观更新：先切 UI，失败再回滚并提示（POST /admin/accounts/:id/schedulable）
+    func setSchedulable(_ account: Account, value: Bool) async {
+        guard let client else { return }
+        guard let index = accounts.firstIndex(where: { $0.id == account.id }) else { return }
+        let original = accounts[index].schedulable
+        accounts[index].schedulable = value
         do {
-            struct BatchBody: Encodable { let account_ids: [Int] }
+            struct Body: Encodable { let schedulable: Bool }
             let _: EmptyData = try await client.request(
-                "POST", "/admin/accounts/\(action.rawValue)",
-                body: BatchBody(account_ids: Array(selectedIds))
+                "POST", "/admin/accounts/\(account.id)/schedulable", body: Body(schedulable: value)
             )
-            batchResultMessage = "「\(action.title)」已提交（\(selectedIds.count) 个账号）。"
-            showBatchResult = true
-            if action.isDestructive {
-                selectedIds.removeAll()
-            }
-            await reload()
         } catch {
-            batchResultMessage = "执行失败：\(error.localizedDescription)"
-            showBatchResult = true
-        }
-        pendingBatchAction = nil
-    }
-
-    // MARK: - 新增账号
-
-    /// 创建账号（POST /admin/accounts）
-    /// - API Key：credential 为 key 明文
-    /// - OAuth：credential 为回跳链接或授权码，先经 exchange-code 交换再创建
-    func createAccount(name: String, platform: String, authType: String, credential: String) async {
-        guard let client, !name.isEmpty, !credential.isEmpty else { return }
-        do {
-            var finalCredential = credential
-            if authType == "oauth" {
-                // OAuth：先交换授权码（POST /admin/{platform}/oauth/exchange-code）
-                // 交换失败直接终止，不拿授权码冒充 API Key 去创建
-                struct ExchangeBody: Encodable { let code: String }
-                struct ExchangeResp: Decodable {
-                    let apiKey: String?
-                    let accessToken: String?
-                    enum CodingKeys: String, CodingKey {
-                        case apiKey = "api_key"
-                        case accessToken = "access_token"
-                    }
-                }
-                let resp: ExchangeResp = try await client.request(
-                    "POST", "/admin/\(platform)/oauth/exchange-code",
-                    body: ExchangeBody(code: credential)
-                )
-                guard let exchanged = resp.apiKey ?? resp.accessToken else {
-                    batchResultMessage = "交换失败：授权码未返回凭证，请重试或改用 API Key。"
-                    showBatchResult = true
-                    return
-                }
-                finalCredential = exchanged
-            }
-            struct Body: Encodable {
-                let name: String
-                let platform: String
-                let authType: String
-                let apiKey: String
-                enum CodingKeys: String, CodingKey {
-                    case name, platform, apiKey
-                    case authType = "auth_type"
-                }
-            }
-            let _: EmptyData = try await client.request(
-                "POST", "/admin/accounts",
-                body: Body(name: name, platform: platform, authType: authType, apiKey: finalCredential)
-            )
-            batchResultMessage = "账号「\(name)」已创建。"
-            showBatchResult = true
-            await reload()
-        } catch {
-            batchResultMessage = "创建失败：\(error.localizedDescription)"
-            showBatchResult = true
+            accounts[index].schedulable = original
+            errorMessage = "设置失败：\(error.localizedDescription)"
+            showError = true
         }
     }
 
@@ -644,6 +214,7 @@ final class AccountListViewModel {
         query.sortOrder = "desc"
         reachedEnd = false
         accounts = []
+        await loadGroups()
         await loadPage()
     }
 
@@ -662,9 +233,7 @@ final class AccountListViewModel {
         defer { isLoading = false }
 
         var extra: [String: String] = [:]
-        if !platformFilter.isEmpty { extra["platform"] = platformFilter }
-        if !statusFilter.isEmpty { extra["status"] = statusFilter }
-        if !tierFilter.isEmpty { extra["tier"] = tierFilter }
+        if let groupFilter { extra["group_id"] = String(groupFilter) }
         if !authFilter.isEmpty { extra["auth_type"] = authFilter }
         if !searchText.isEmpty { extra["search"] = searchText }
         query.extra = extra
@@ -678,6 +247,18 @@ final class AccountListViewModel {
         } catch {
             self.error = error
             return false
+        }
+    }
+
+    private func loadGroups() async {
+        guard let client else { return }
+        do {
+            let page: Page<AccountGroup> = try await client.page(
+                "/admin/groups", query: PageQuery(pageSize: 200)
+            )
+            groups = page.items
+        } catch {
+            // 分组加载失败不阻塞账号列表，仅无法显示分组名
         }
     }
 

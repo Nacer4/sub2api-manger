@@ -222,27 +222,6 @@ body{
 .ckb.on{background:var(--accent); border-color:var(--accent); box-shadow:0 0 14px rgba(255,138,61,.4)}
 .ckb.on::after{content:"✓"; font-size:13px; color:#241203; font-weight:800}
 
-/* ============ 浮动批量条（玻璃浮岛） ============ */
-.batch-bar{
-  position:absolute; left:18px; right:18px; bottom:116px; z-index:38;
-  border-radius:24px; padding:13px 16px; display:flex; align-items:center; gap:11px;
-  background:var(--glass-2); border:1px solid rgba(255,138,61,.4);
-  -webkit-backdrop-filter:blur(30px) saturate(170%); backdrop-filter:blur(30px) saturate(170%);
-  box-shadow:inset 0 1px 0 rgba(255,255,255,.10), 0 16px 44px rgba(0,0,0,.5), 0 0 30px rgba(255,138,61,.12);
-  transform:translateY(130px); opacity:0; pointer-events:none; transition:all .4s var(--ease);
-}
-.batch-bar.show{transform:none; opacity:1; pointer-events:auto}
-.batch-bar .cnt{font-size:20px; font-weight:800; color:var(--accent-2); font-variant-numeric:tabular-nums}
-.batch-bar .cnt small{display:block; font-size:9px; font-family:var(--mono); color:var(--ink-3); letter-spacing:.14em; font-weight:400}
-.batch-bar .sep{width:1px; height:34px; background:var(--stroke)}
-.bact{
-  flex:1; border:none; background:none; color:var(--ink-2); font-size:10px; font-family:var(--font); font-weight:600;
-  display:flex; flex-direction:column; align-items:center; gap:5px; cursor:pointer; padding:5px 0; border-radius:12px; transition:.15s;
-}
-.bact svg{width:19px; height:19px; stroke:currentColor; fill:none; stroke-width:1.8}
-.bact:active{background:rgba(255,255,255,.08)}
-.bact.danger{color:var(--err)}
-
 /* ============ Sheet（玻璃底部弹层） ============ */
 .overlay{position:absolute; inset:0; z-index:70; background:rgba(6,7,12,.45); -webkit-backdrop-filter:blur(3px); backdrop-filter:blur(3px); opacity:0; pointer-events:none; transition:opacity .3s}
 .overlay.show{opacity:1; pointer-events:auto}
@@ -455,19 +434,13 @@ body{
     <section class="view" id="v-acct">
       <div class="page-head">
         <div><h1 id="acct-title">账号管理</h1><div class="sub" id="acct-sub">RESOURCES · 26 POOL</div></div>
-        <button class="head-btn" id="btn-acct-add" title="新增账号"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
         <button class="head-btn" id="btn-groups" title="分组管理"><svg viewBox="0 0 24 24"><path d="M12 2l9 5-9 5-9-5 9-5z"/><path d="M3 12l9 5 9-5"/><path d="M3 17l9 5 9-5"/></svg></button>
-        <button class="head-btn" id="btn-select"><svg viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></button>
       </div>
       <div class="search"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg><input id="acct-search" placeholder="搜索账号名称…"></div>
-      <div class="chips" id="plat-chips">
-        <span class="chip on" data-p="">全部</span><span class="chip" data-p="claude">claude</span>
-        <span class="chip" data-p="openai">openai</span><span class="chip" data-p="gemini">gemini</span><span class="chip" data-p="grok">grok</span>
+      <div class="chips" id="grp-chips">
+        <span class="chip on" data-g="">全部分组</span><span class="chip" data-g="default">default</span>
+        <span class="chip" data-g="premium">premium</span><span class="chip" data-g="codex">codex</span><span class="chip" data-g="budget">budget</span>
       </div>
-      <div class="seg" id="acct-status-seg"><div class="pill"></div><button class="on" data-st="">全部状态</button><button data-st="active">active</button><button data-st="error">error</button><button data-st="rate_limited">limited</button><button data-st="expired">expired</button></div>
-      <div style="height:10px"></div>
-      <div class="seg" id="acct-tier-seg"><div class="pill"></div><button class="on" data-tr="">全部等级</button><button data-tr="free">free</button><button data-tr="pro">pro</button><button data-tr="max5">max5</button><button data-tr="max20">max20</button></div>
-      <div style="height:10px"></div>
       <div class="chips" id="auth-chips" style="padding-bottom:2px">
         <span class="chip on" data-a="">全部认证</span><span class="chip" data-a="oauth">oauth</span><span class="chip" data-a="api_key">api_key</span>
       </div>
@@ -538,31 +511,8 @@ body{
       <button class="tab" data-v="set"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M19.1 4.9L17 7M7 17l-2.1 2.1"/></svg>设置</button>
     </nav>
 
-    <!-- 浮动批量条 -->
-    <div class="batch-bar" id="batch-bar">
-      <div class="cnt"><small>已选</small><span id="b-cnt">0</span></div>
-      <div class="sep"></div>
-      <button class="bact" data-b="batch-refresh"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.6M20 4v5h-5"/></svg>刷新凭证</button>
-      <button class="bact" data-b="batch-clear-error"><svg viewBox="0 0 24 24"><path d="M12 3l10 18H2z"/><path d="M12 10v5"/></svg>清除错误</button>
-      <button class="bact" data-b="batch-refresh-tier"><svg viewBox="0 0 24 24"><path d="M12 3l2.5 6 6.5.5-5 4.5 1.7 6.5L12 17l-5.7 3.5L8 14 3 9.5l6.5-.5z"/></svg>刷新等级</button>
-      <button class="bact danger" data-b="batch-delete"><svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg>删除</button>
-    </div>
-
-    <!-- Sheet：批量确认 -->
-    <div class="overlay" id="ov"></div>
-    <div class="sheet" id="sh-batch">
-      <div class="grabber"></div>
-      <h2 id="sh-title">确认执行</h2>
-      <p class="desc" id="sh-desc"></p>
-      <div class="prev-list" id="sh-prev"></div>
-      <div class="progress" id="sh-prog"><i></i></div>
-      <div class="sheet-acts" style="justify-content:flex-end">
-        <button class="link" id="sh-cancel">取消</button>
-        <button class="btn primary" id="sh-go" style="flex:0 0 auto; min-width:130px">确认执行</button>
-      </div>
-    </div>
-
     <!-- Sheet：使用记录筛选 -->
+    <div class="overlay" id="ov"></div>
     <div class="sheet" id="sh-filter">
       <div class="grabber"></div>
       <h2>筛选条件</h2>
@@ -594,41 +544,6 @@ body{
       </div>
     </div>
 
-    <!-- Sheet：新增账号（OAuth 授权流 / API Key，对标 sub2api 官方 dashboard） -->
-    <div class="sheet" id="sh-acct-add">
-      <div class="grabber"></div>
-      <h2>新增账号</h2>
-      <div class="fld"><label>平台</label>
-        <div class="seg" id="na-plat" style="margin:0"><div class="pill"></div><button class="on" data-np="claude">claude</button><button data-np="openai">openai</button><button data-np="gemini">gemini</button><button data-np="grok">grok</button></div>
-      </div>
-      <div class="fld"><label>认证方式</label>
-        <div class="seg" id="na-auth" style="margin:0"><div class="pill"></div><button class="on" data-nat="oauth">OAuth 授权</button><button data-nat="api_key">API Key</button></div>
-      </div>
-      <!-- OAuth 流：生成授权链接 → 粘贴回跳 → 交换 -->
-      <div id="na-oauth">
-        <div class="fld"><label>STEP 1 · 生成授权链接</label>
-          <button class="btn small" id="na-genurl" style="width:100%; border-radius:13px">生成 OAuth 授权链接</button>
-          <div class="codeblk" id="na-url" style="display:none; margin-top:9px; word-break:break-all"></div>
-        </div>
-        <div class="fld"><label>STEP 2 · 粘贴回跳链接或授权码</label>
-          <input class="finput" id="na-code" placeholder="粘贴回调 URL / code=…" style="font-family:var(--mono)">
-        </div>
-      </div>
-      <!-- API Key 直填 -->
-      <div id="na-key" style="display:none">
-        <div class="fld"><label>API KEY</label>
-          <input class="finput" id="na-apikey" placeholder="sk-ant-… / sk-…" style="font-family:var(--mono)">
-        </div>
-        <div class="fld"><label>代理（可选）</label>
-          <input class="finput" id="na-proxy" placeholder="http://user:pass@host:port" style="font-family:var(--mono)">
-        </div>
-      </div>
-      <div class="sheet-acts" style="margin-top:24px">
-        <button class="link" id="na-cancel">取消</button>
-        <button class="btn primary" id="na-save" style="min-width:130px">保存账号</button>
-      </div>
-    </div>
-
     <!-- Push：错误详情 -->
     <div class="push" id="push">
       <div class="nav">
@@ -654,6 +569,7 @@ const accounts=Array.from({length:26},(_,i)=>{
   return {
     id:1001+i, name:`${plat}-pool-${String(i+1).padStart(2,'0')}`, plat,
     status, tier:['free','pro','max5','max20'][i%4],
+    group:['default','premium','codex','budget'][i%4],
     auth:i%3===0?'api_key':'oauth',
     req:Math.floor(Math.random()*900), sched:status==='expired'?false:Math.random()>.15,
     last:`${1+Math.floor(Math.random()*40)}m`
@@ -850,89 +766,48 @@ function openUserPush(u){
   };
 }
 
-/* ============ 账号管理 ============ */
-let sel=new Set(),selectMode=false,platF='',stF='',tierF='',authF='',kw='';
-const BATCHES={'batch-refresh':{t:'批量刷新凭证',d:false},'batch-clear-error':{t:'批量清除错误状态',d:false},'batch-refresh-tier':{t:'批量刷新账号等级',d:false},'batch-delete':{t:'批量删除账号',d:true}};
-const TIER_CLS={free:'mut',pro:'info',max5:'warn',max20:'ok'};
+/* ============ 账号管理（简化：筛选 + 信息展示 + 调度开关） ============ */
+let grpF='',authF='',kw='';
 function acctRows(){
-  return accounts.filter(a=>(!platF||a.plat===platF)&&(!stF||a.status===stF)
-    &&(!tierF||a.tier===tierF)&&(!authF||a.auth===authF)&&(!kw||a.name.includes(kw)));
+  return accounts.filter(a=>(!grpF||a.group===grpF)&&(!authF||a.auth===authF)&&(!kw||a.name.includes(kw)));
 }
 function renderAcct(){
   const rows=acctRows();
   $('#acct-list').innerHTML=rows.map(a=>`
-    <div class="acct-card ${sel.has(a.id)?'selected':''}" data-id="${a.id}">
-      ${selectMode?`<span class="ckb ${sel.has(a.id)?'on':''}"></span>`:''}
+    <div class="acct-card" data-id="${a.id}">
       <span class="acct-ico ${a.plat}">${a.plat.slice(0,2).toUpperCase()}</span>
       <div class="acct-info">
         <div class="nm">${a.name}</div>
         <div class="meta">
           <span class="pill ${a.status==='active'?'ok':a.status==='error'?'err':a.status==='rate_limited'?'warn':'mut'}">${a.status}</span>
-          <span class="pill ${TIER_CLS[a.tier]||'mut'}">${a.tier}</span>
+          <span class="pill info">${a.group}</span>
           <span>${a.auth} · ${a.req}req</span>
         </div>
       </div>
-      ${selectMode?'':`<span class="switch ${a.sched?'on':''}" data-sw="${a.id}"><i></i></span>`}
+      <span class="switch ${a.sched?'on':''}" data-sw="${a.id}"><i></i></span>
     </div>`).join('');
   $('#acct-empty').style.display=rows.length?'none':'block';
-  const anyF=platF||stF||tierF||authF;
+  const anyF=grpF||authF;
   $('#acct-sub').textContent=anyF?`RESOURCES · ${rows.length}/${accounts.length} 匹配`:`RESOURCES · ${rows.length} POOL`;
-  const bar=$('#batch-bar');
-  if(selectMode&&sel.size){bar.classList.add('show'); $('#b-cnt').textContent=sel.size;}
-  else bar.classList.remove('show');
 }
-$('#btn-select').onclick=()=>{
-  selectMode=!selectMode; if(!selectMode)sel.clear();
-  $('#acct-title').textContent=selectMode?`已选 ${sel.size}`:'账号管理';
-  renderAcct();
-};
 $('#acct-list').onclick=e=>{
-  const card=e.target.closest('.acct-card'),sw=e.target.closest('[data-sw]');
+  const sw=e.target.closest('[data-sw]');
   if(sw){const a=accounts.find(x=>x.id===+sw.dataset.sw); if(!a)return;
-    a.sched=!a.sched; sw.classList.toggle('on'); toast(`${a.name} 调度已${a.sched?'开启':'关闭'}`); return;}
-  if(card&&selectMode){const id=+card.dataset.id; sel.has(id)?sel.delete(id):sel.add(id);
-    $('#acct-title').textContent=`已选 ${sel.size}`; renderAcct();}
+    a.sched=!a.sched; sw.classList.toggle('on'); toast(`${a.name} 调度已${a.sched?'开启':'关闭'}`);}
 };
-$$('#plat-chips .chip').forEach(c=>c.onclick=()=>{
-  $$('#plat-chips .chip').forEach(x=>x.classList.remove('on')); c.classList.add('on');
-  platF=c.dataset.p; renderAcct();
+$$('#grp-chips .chip').forEach(c=>c.onclick=()=>{
+  $$('#grp-chips .chip').forEach(x=>x.classList.remove('on')); c.classList.add('on');
+  grpF=c.dataset.g; renderAcct();
 });
-$('#acct-status-seg').addEventListener('segchange',e=>{stF=e.detail.st; renderAcct();});
-$('#acct-tier-seg').addEventListener('segchange',e=>{tierF=e.detail.tr; renderAcct();});
 $$('#auth-chips .chip').forEach(c=>c.onclick=()=>{
   $$('#auth-chips .chip').forEach(x=>x.classList.remove('on')); c.classList.add('on');
   authF=c.dataset.a; renderAcct();
 });
 let st; $('#acct-search').oninput=e=>{clearTimeout(st); st=setTimeout(()=>{kw=e.target.value.trim(); renderAcct();},350)};
 
-/* 批量确认 Sheet */
-let pending=null, batchIv=null;
-$$('#batch-bar .bact').forEach(b=>b.onclick=()=>{
-  const k=b.dataset.b,m=BATCHES[k];
-  const names=[...sel].map(id=>accounts.find(a=>a.id===id)).filter(Boolean).map(a=>a.name);
-  pending={ids:[...sel],key:k,title:m.t,dang:m.d};
-  $('#sh-title').textContent=m.t;
-  $('#sh-desc').textContent=`将对 ${sel.size} 个账号执行该操作。`+(m.d?' 该操作不可恢复。':'');
-  $('#sh-prev').innerHTML=names.slice(0,5).map(n=>`<div>${n}</div>`).join('')+(names.length>5?`<div class="more">…及其他 ${names.length-5} 个</div>`:'');
-  $('#sh-go').className='btn '+(m.d?'danger':'primary'); $('#sh-go').disabled=false;
-  $('#sh-prog').classList.remove('show'); $('#sh-prog i').style.width='0';
-  $('#ov').classList.add('show'); $('#sh-batch').classList.add('show');
-});
-function closeSheets(){$('#ov').classList.remove('show');$$('.sheet').forEach(s=>s.classList.remove('show'));
-  if(batchIv){clearInterval(batchIv); batchIv=null;} $('#sh-go').disabled=false;}
-$('#sh-cancel').onclick=closeSheets; $('#ov').onclick=closeSheets;
-$('#sh-go').onclick=()=>{
-  if(!pending)return; const{ids,key,title,dang}=pending;
-  if(batchIv)clearInterval(batchIv);
-  $('#sh-go').disabled=true; const pr=$('#sh-prog'); pr.classList.add('show');
-  let p=0; batchIv=setInterval(()=>{p+=Math.random()*32; pr.querySelector('i').style.width=Math.min(100,p)+'%';
-    if(p>=100){clearInterval(batchIv); batchIv=null; closeSheets();
-      if(key==='batch-delete'){ids.forEach(id=>{const i=accounts.findIndex(a=>a.id===id);if(i>-1)accounts.splice(i,1)}); sel.clear();
-        $('#acct-title').textContent=selectMode?`已选 ${sel.size}`:'账号管理';}
-      else if(key==='batch-clear-error')ids.forEach(id=>{const a=accounts.find(x=>x.id===id); if(a)a.status='active'});
-      renderAcct(); toast(`「${title}」已完成（${ids.length} 个）`);}
-  },240);
-};
+/* Sheet 通用关闭 */
+function closeSheets(){$('#ov').classList.remove('show');$$('.sheet').forEach(s=>s.classList.remove('show'));}
+$('#ov').onclick=closeSheets;
 
 /* ============ 使用记录 ============ */
 let uF={uid:'',aid:'',rid:'',stream:'',model:'',time:''};
@@ -1017,36 +892,6 @@ $('#log-tabs').addEventListener('segchange',e=>{
   $('#tab-errors').style.display=e.detail.t==='errors'?'block':'none';
   window.dispatchEvent(new Event('resize'));
 });
-
-/* ============ 新增账号（OAuth 授权流 / API Key） ============ */
-let naPlat='claude', naAuth='oauth';
-$('#na-plat').addEventListener('segchange',e=>{naPlat=e.detail.np;});
-$('#na-auth').addEventListener('segchange',e=>{
-  naAuth=e.detail.nat;
-  $('#na-oauth').style.display=naAuth==='oauth'?'block':'none';
-  $('#na-key').style.display=naAuth==='api_key'?'block':'none';
-});
-$('#btn-acct-add').onclick=()=>{
-  $('#na-url').style.display='none'; $('#na-code').value='';
-  $('#na-apikey').value=''; $('#na-proxy').value='';
-  $('#ov').classList.add('show'); $('#sh-acct-add').classList.add('show');
-};
-$('#na-cancel').onclick=closeSheets;
-$('#na-genurl').onclick=()=>{
-  // 对标 POST /admin/{platform}/oauth/auth-url
-  const url=`https://auth.${naPlat}.com/oauth/authorize?client_id=sub2api&state=${Math.random().toString(36).slice(2,10)}&redirect_uri=https://your-sub2api.com/callback`;
-  const el=$('#na-url'); el.textContent=url; el.style.display='block';
-  toast('授权链接已生成，请在浏览器完成授权');
-};
-$('#na-save').onclick=()=>{
-  if(naAuth==='oauth'&&!$('#na-code').value.trim()){toast('请粘贴回跳链接或授权码','err'); return;}
-  if(naAuth==='api_key'&&!$('#na-apikey').value.trim()){toast('API Key 不能为空','err'); return;}
-  const id=Math.max(0,...accounts.map(a=>a.id))+1;
-  accounts.unshift({id,name:`${naPlat}-pool-${String(accounts.length+1).padStart(2,'0')}`,plat:naPlat,
-    status:'active',tier:'free',auth:naAuth,req:0,sched:true,last:'刚刚'});
-  closeSheets(); renderAcct();
-  toast(naAuth==='oauth'?'OAuth 授权码已交换，账号已创建':'API Key 账号已创建');
-};
 
 /* ============ 分组管理 ============ */
 const groups=[
