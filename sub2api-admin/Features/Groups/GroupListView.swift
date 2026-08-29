@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// 分组管理：列表 + 新建/编辑/删除
+/// 分组管理：信息卡展示（平台/计费/倍率/类型/账号数/容量/用量）+ 新建/编辑/删除
 /// API：GET/POST /admin/groups，PUT/DELETE /admin/groups/:id
 struct GroupListView: View {
     @State private var viewModel = GroupListViewModel()
@@ -22,6 +22,23 @@ struct GroupListView: View {
                         GroupRow(group: group)
                     }
                     .tint(.primary)
+                    .contextMenu {
+                        Button {
+                            viewModel.copyGroup(group)
+                        } label: {
+                            Label("复制", systemImage: "doc.on.doc")
+                        }
+                        Button {
+                            viewModel.notice("分组「\(group.name ?? "#\(group.id)")」专属倍率设置")
+                        } label: {
+                            Label("专属倍率", systemImage: "percent")
+                        }
+                        Button {
+                            viewModel.notice("分组「\(group.name ?? "#\(group.id)")」专属 RPM 设置")
+                        } label: {
+                            Label("专属 RPM", systemImage: "gauge.with.needle")
+                        }
+                    }
                 }
             }
         }
@@ -39,8 +56,13 @@ struct GroupListView: View {
         .sheet(isPresented: $viewModel.showEditSheet) {
             GroupEditSheet(
                 group: viewModel.editingGroup,
-                onSave: { name, desc, models, priority in
-                    Task { await viewModel.save(name: name, description: desc, models: models, priority: priority) }
+                onSave: { name, platform, billingType, rate, groupType in
+                    Task {
+                        await viewModel.save(
+                            name: name, platform: platform, billingType: billingType,
+                            rate: rate, groupType: groupType
+                        )
+                    }
                 },
                 onDelete: viewModel.editingGroup == nil ? nil : {
                     Task { await viewModel.delete(viewModel.editingGroup!) }
@@ -60,84 +82,105 @@ struct GroupListView: View {
     }
 }
 
+// MARK: - 分组信息卡
+
 struct GroupRow: View {
     let group: AccountGroup
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Text(group.name ?? "分组 #\(group.id)")
-                    .font(.subheadline.weight(.medium))
+                    .font(.subheadline.weight(.semibold))
                 Spacer()
-                if let priority = group.priority {
-                    Text("P\(priority)")
-                        .font(.caption2.monospaced().weight(.semibold))
-                        .foregroundStyle(.tint)
-                        .padding(.horizontal, 7)
-                        .padding(.vertical, 2)
-                        .background(.tint.opacity(0.12), in: .capsule)
-                }
+                statusPill
             }
-            if let desc = group.description, !desc.isEmpty {
-                Text(desc)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+
+            VStack(spacing: 0) {
+                LabeledRow("平台", group.platform)
+                LabeledRow("计费类型", group.billingType)
+                LabeledRow("费率倍数", group.rateMultiplier.map { "\($0)x" })
+                LabeledRow("类型", group.groupType)
+                LabeledRow("账号数", accountsText)
+                LabeledRow("容量", capacityText)
+                LabeledRow("用量", usageText)
             }
-            if let models = group.models, !models.isEmpty {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 6) {
-                        ForEach(models, id: \.self) { model in
-                            Text(model)
-                                .font(.caption2.monospaced())
-                                .foregroundStyle(.blue)
-                                .padding(.horizontal, 7)
-                                .padding(.vertical, 2)
-                                .background(.blue.opacity(0.1), in: .capsule)
-                        }
-                    }
-                }
-            }
-            Text("ID \(group.id)")
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, 4)
+    }
+
+    private var statusPill: some View {
+        let text = group.status ?? "正常"
+        let color: Color = text == "正常" ? .green : .orange
+        return Text(text)
+            .font(.caption2.weight(.medium))
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(color.opacity(0.15), in: Capsule())
+            .foregroundStyle(color)
+    }
+
+    private var accountsText: String? {
+        switch (group.availableAccounts, group.totalAccounts) {
+        case let (avail?, total?): return "可用:\(avail)个账号 · 总量:\(total)个账号"
+        case let (avail?, nil): return "可用:\(avail)个账号"
+        case let (nil, total?): return "总量:\(total)个账号"
+        default: return nil
+        }
+    }
+
+    private var capacityText: String? {
+        if let used = group.capacityUsed, let limit = group.capacityLimit {
+            return "\(used) / \(limit)"
+        }
+        return group.capacityLimit.map { "- / \($0)" }
+    }
+
+    private var usageText: String? {
+        var parts: [String] = []
+        if let today = group.todayCost { parts.append("今日\(Fmt.usd(today))") }
+        if let yesterday = group.yesterdayCost { parts.append("昨日\(Fmt.usd(yesterday))") }
+        if let total = group.totalCost { parts.append("累计\(Fmt.usd(total))") }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 }
 
 // MARK: - 新建/编辑 Sheet
 
-/// 分组表单：名称 / 描述 / 模型列表（逗号分隔）/ 优先级；编辑模式附加删除
+/// 分组表单：名称 / 平台 / 计费类型 / 费率倍数 / 类型；编辑模式附加删除
 struct GroupEditSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var name: String
-    @State private var desc: String
-    @State private var modelsText: String
-    @State private var priority: Int
+    @State private var platform: String
+    @State private var billingType: String
+    @State private var rateText: String
+    @State private var groupType: String
     @State private var isRunning = false
 
     let existing: AccountGroup?
-    let onSave: (String, String, [String], Int) async -> Void
+    let onSave: (String, String, String, Double, String) async -> Void
     let onDelete: (() async -> Void)?
 
     init(
         group: AccountGroup?,
-        onSave: @escaping (String, String, [String], Int) async -> Void,
+        onSave: @escaping (String, String, String, Double, String) async -> Void,
         onDelete: (() async -> Void)? = nil
     ) {
         existing = group
         self.onSave = onSave
         self.onDelete = onDelete
         _name = State(initialValue: group?.name ?? "")
-        _desc = State(initialValue: group?.description ?? "")
-        _modelsText = State(initialValue: (group?.models ?? []).joined(separator: ", "))
-        _priority = State(initialValue: group?.priority ?? 0)
+        _platform = State(initialValue: group?.platform ?? "OpenAI")
+        _billingType = State(initialValue: group?.billingType ?? "标准（余额）")
+        _rateText = State(initialValue: group.map { String(format: "%.3g", $0.rateMultiplier ?? 0.1) } ?? "0.1")
+        _groupType = State(initialValue: group?.groupType ?? "公开")
     }
 
-    private var models: [String] {
-        modelsText.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
-            .filter { !$0.isEmpty }
-    }
+    private let platforms = ["OpenAI", "Claude", "Gemini", "Grok"]
+    private let billingTypes = ["标准（余额）", "标准（订阅）", "按量计费"]
+    private let groupTypes = ["公开", "私有"]
+
+    private var rate: Double { Double(rateText.trimmingCharacters(in: .whitespaces)) ?? 0.1 }
 
     var body: some View {
         NavigationStack {
@@ -146,20 +189,18 @@ struct GroupEditSheet: View {
                     TextField("名称（必填）", text: $name)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
-                    TextField("描述", text: $desc)
-                    Stepper("优先级 \(priority)", value: $priority, in: 0...9999)
-                }
-
-                Section {
-                    TextField("claude-sonnet-4.5, gpt-5.2-codex", text: $modelsText, axis: .vertical)
+                    Picker("平台", selection: $platform) {
+                        ForEach(platforms, id: \.self) { Text($0).tag($0) }
+                    }
+                    Picker("计费类型", selection: $billingType) {
+                        ForEach(billingTypes, id: \.self) { Text($0).tag($0) }
+                    }
+                    TextField("费率倍数（如 0.1）", text: $rateText)
+                        .keyboardType(.decimalPad)
                         .font(.body.monospaced())
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .lineLimit(2...4)
-                } header: {
-                    Text("模型列表")
-                } footer: {
-                    Text("逗号分隔。请求模型命中分组内模型时路由到该分组。")
+                    Picker("类型", selection: $groupType) {
+                        ForEach(groupTypes, id: \.self) { Text($0).tag($0) }
+                    }
                 }
 
                 if onDelete != nil {
@@ -188,15 +229,11 @@ struct GroupEditSheet: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("保存") {
-                        guard !name.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+                        let trimmed = name.trimmingCharacters(in: .whitespaces)
+                        guard !trimmed.isEmpty else { return }
                         isRunning = true
                         Task {
-                            await onSave(
-                                name.trimmingCharacters(in: .whitespaces),
-                                desc.trimmingCharacters(in: .whitespaces),
-                                models,
-                                priority
-                            )
+                            await onSave(trimmed, platform, billingType, rate, groupType)
                             isRunning = false
                             dismiss()
                         }
@@ -242,6 +279,11 @@ final class GroupListViewModel {
         showEditSheet = true
     }
 
+    func notice(_ message: String) {
+        resultMessage = message
+        showResult = true
+    }
+
     func reload() async {
         guard let client else { return }
         isLoading = true
@@ -258,19 +300,25 @@ final class GroupListViewModel {
     }
 
     /// 创建 / 更新（对应 POST /admin/groups 与 PUT /admin/groups/:id）
-    func save(name: String, description: String, models: [String], priority: Int) async {
+    func save(name: String, platform: String, billingType: String, rate: Double, groupType: String) async {
         guard let client else { return }
         struct Body: Encodable {
             let name: String
-            let description: String?
-            let models: [String]
-            let priority: Int
+            let platform: String
+            let billingType: String
+            let rateMultiplier: Double
+            let groupType: String
+
+            enum CodingKeys: String, CodingKey {
+                case name, platform
+                case billingType = "billing_type"
+                case rateMultiplier = "rate_multiplier"
+                case groupType = "group_type"
+            }
         }
         let body = Body(
-            name: name,
-            description: description.isEmpty ? nil : description,
-            models: models,
-            priority: priority
+            name: name, platform: platform, billingType: billingType,
+            rateMultiplier: rate, groupType: groupType
         )
         do {
             if let existing = editingGroup {
@@ -289,6 +337,43 @@ final class GroupListViewModel {
             resultMessage = "保存失败：\(error.localizedDescription)"
         }
         showResult = true
+    }
+
+    /// 复制分组配置（新建同配置分组）
+    func copyGroup(_ group: AccountGroup) {
+        guard let client else { return }
+        let name = (group.name ?? "group") + "-copy"
+        struct Body: Encodable {
+            let name: String
+            let platform: String
+            let billingType: String
+            let rateMultiplier: Double
+            let groupType: String
+
+            enum CodingKeys: String, CodingKey {
+                case name, platform
+                case billingType = "billing_type"
+                case rateMultiplier = "rate_multiplier"
+                case groupType = "group_type"
+            }
+        }
+        let body = Body(
+            name: name,
+            platform: group.platform ?? "OpenAI",
+            billingType: group.billingType ?? "标准（余额）",
+            rateMultiplier: group.rateMultiplier ?? 0.1,
+            groupType: group.groupType ?? "公开"
+        )
+        Task {
+            do {
+                let _: EmptyData = try await client.request("POST", "/admin/groups", body: body)
+                resultMessage = "已复制为分组「\(name)」。"
+                await reload()
+            } catch {
+                resultMessage = "复制失败：\(error.localizedDescription)"
+            }
+            showResult = true
+        }
     }
 
     /// 删除（DELETE /admin/groups/:id）

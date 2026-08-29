@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// 账号管理（简化）：分组/认证筛选 + 简单信息展示 + 调度开关
+/// 账号管理：分组/认证筛选 + 信息卡展示 + 调度开关 + 编辑/删除/更多
 struct AccountListView: View {
     @State private var viewModel = AccountListViewModel()
 
@@ -19,10 +19,20 @@ struct AccountListView: View {
                 ForEach(viewModel.accounts) { account in
                     AccountRow(
                         account: account,
-                        groupName: viewModel.groupName(for: account)
-                    ) { newValue in
-                        Task { await viewModel.setSchedulable(account, value: newValue) }
-                    }
+                        groupName: viewModel.groupName(for: account),
+                        onToggleSchedulable: { newValue in
+                            Task { await viewModel.setSchedulable(account, value: newValue) }
+                        },
+                        onEdit: {
+                            viewModel.notice("编辑账号「\(account.name ?? "#\(account.id)")」")
+                        },
+                        onDelete: {
+                            viewModel.requestDelete(account)
+                        },
+                        onMore: {
+                            viewModel.notice("账号「\(account.name ?? "#\(account.id)")」更多操作")
+                        }
+                    )
                     .listRowSeparator(.hidden)
                 }
                 LoadMoreFooter(
@@ -48,10 +58,22 @@ struct AccountListView: View {
                 }
             }
         }
-        .alert("提示", isPresented: $viewModel.showError) {
+        .alert("提示", isPresented: $viewModel.showNotice) {
             Button("好", role: .cancel) {}
         } message: {
-            Text(viewModel.errorMessage)
+            Text(viewModel.noticeMessage)
+        }
+        .alert("删除账号", isPresented: $viewModel.showDeleteConfirm) {
+            Button("取消", role: .cancel) {
+                viewModel.pendingDelete = nil
+            }
+            Button("删除", role: .destructive) {
+                Task { await viewModel.deletePending() }
+            }
+        } message: {
+            if let account = viewModel.pendingDelete {
+                Text("将删除账号「\(account.name ?? "#\(account.id)")」，该操作不可恢复。")
+            }
         }
         .overlay {
             if viewModel.isLoading, viewModel.accounts.isEmpty {
@@ -86,66 +108,152 @@ struct AccountListView: View {
     }
 }
 
+// MARK: - 账号信息卡
+
 struct AccountRow: View {
     let account: Account
     let groupName: String?
     let onToggleSchedulable: (Bool) -> Void
+    let onEdit: () -> Void
+    let onDelete: () -> Void
+    let onMore: () -> Void
 
     var body: some View {
-        HStack(alignment: .center, spacing: 12) {
-            Image(systemName: platformSymbol)
-                .font(.title3)
-                .foregroundStyle(.tint)
-                .frame(width: 28)
+        VStack(alignment: .leading, spacing: 10) {
+            header
 
-            VStack(alignment: .leading, spacing: 4) {
+            if let tags = account.tags, !tags.isEmpty {
                 HStack(spacing: 6) {
-                    Text(account.name ?? "账号 #\(account.id)")
-                        .font(.subheadline.weight(.medium))
-                        .lineLimit(1)
-                    StatusPill(account.status)
-                }
-                HStack(spacing: 4) {
-                    Text(account.platform?.uppercased() ?? "-")
-                    if let authType = account.authType {
-                        Text("· \(authType)")
-                    }
-                    if let tier = account.tier, !tier.isEmpty {
-                        Text("· \(tier)")
-                            .foregroundStyle(.tint)
-                    }
-                    if let groupName {
-                        Text("· \(groupName)")
-                            .foregroundStyle(.tint)
+                    ForEach(tags, id: \.self) { tag in
+                        Text(tag)
+                            .font(.caption2.monospaced())
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 3)
+                            .background(.fill.tertiary, in: Capsule())
                     }
                 }
-                .font(.caption)
-                .foregroundStyle(.secondary)
             }
 
-            Spacer()
+            VStack(spacing: 0) {
+                LabeledRow("容量", capacityText)
+                LabeledRow("状态", pill: account.status)
+                schedRow
+                LabeledRow("分组", groupText)
+                LabeledRow("用量窗口", windowText)
+                LabeledRow("", amountText)
+                LabeledRow("上游声明倍率", rateText)
+                LabeledRow("最近使用", Fmt.date(account.lastUsedAt))
+                LabeledRow("创建时间", Fmt.date(account.createdAt))
+                LabeledRow("过期时间", Fmt.date(account.expiredAt))
+            }
 
+            actionsRow
+        }
+        .padding(.vertical, 4)
+    }
+
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(account.name ?? "账号 #\(account.id)")
+                .font(.subheadline.weight(.semibold))
+            Text("#\(account.id) · \(account.platform ?? "-") \(authLabel)")
+                .font(.caption.monospaced())
+                .foregroundStyle(.tertiary)
+        }
+    }
+
+    private var authLabel: String {
+        account.authType == "api_key" ? "Key" : (account.authType ?? "-")
+    }
+
+    private var capacityText: String? {
+        if let used = account.capacityUsed, let limit = account.capacityLimit {
+            return "\(used) / \(limit)"
+        }
+        return account.capacityLimit.map { "- / \($0)" }
+    }
+
+    private var groupText: String? {
+        switch (groupName, account.groupNote) {
+        case let (name?, note?): return "\(name) · \(note)"
+        case let (name?, nil): return name
+        case let (nil, note?): return note
+        default: return nil
+        }
+    }
+
+    private var windowText: String? {
+        switch (account.windowRequests, account.windowTokens) {
+        case let (req?, tok?): return "\(req) req · \(tok)"
+        case let (req?, nil): return "\(req) req"
+        case let (nil, tok?): return tok
+        default: return nil
+        }
+    }
+
+    private var amountText: String? {
+        switch (account.windowAmount, account.windowUserAmount) {
+        case let (a?, u?): return "A \(Fmt.usd(a)) · U \(Fmt.usd(u))"
+        case let (a?, nil): return "A \(Fmt.usd(a))"
+        case let (nil, u?): return "U \(Fmt.usd(u))"
+        default: return nil
+        }
+    }
+
+    private var rateText: String? {
+        account.rateMultiplier.map { "\($0)x" }
+    }
+
+    private var schedRow: some View {
+        HStack {
+            Text("调度")
+                .foregroundStyle(.secondary)
+            Spacer()
             Toggle("", isOn: Binding(
                 get: { account.schedulable ?? true },
                 set: onToggleSchedulable
             ))
             .labelsHidden()
-            .tint(.accentColor)
         }
-        .padding(.vertical, 2)
+        .font(.subheadline)
     }
 
-    private var platformSymbol: String {
-        switch account.platform?.lowercased() {
-        case "claude", "anthropic": return "bubble.left.and.text.bubble.right"
-        case "openai", "codex": return "circle.hexagongrid"
-        case "gemini": return "sparkles"
-        case "grok": return "bolt"
-        case "antigravity": return "arrow.up.circle"
-        default: return "externaldrive.connected.to.line.below"
+    private var actionsRow: some View {
+        HStack(spacing: 8) {
+            Button {
+                onEdit()
+            } label: {
+                Label("编辑", systemImage: "pencil")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+
+            Button(role: .destructive) {
+                onDelete()
+            } label: {
+                Label("删除", systemImage: "trash")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+            .tint(.red)
+
+            Menu {
+                Button("测试可用性", systemImage: "checkmark.seal") { onMore() }
+                Button("刷新凭证", systemImage: "arrow.clockwise") { onMore() }
+                Button("刷新账号等级", systemImage: "sparkles") { onMore() }
+            } label: {
+                Label("更多", systemImage: "ellipsis.circle")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
         }
+        .font(.caption)
+        .labelStyle(.titleAndIcon)
     }
 }
+
+// MARK: - ViewModel
 
 @MainActor
 @Observable
@@ -160,8 +268,11 @@ final class AccountListViewModel {
 
     var groups: [AccountGroup] = []
 
-    var showError = false
-    var errorMessage = ""
+    var showNotice = false
+    var noticeMessage = ""
+
+    var pendingDelete: Account?
+    var showDeleteConfirm = false
 
     /// 认证方式
     let authTypes = ["oauth", "api_key"]
@@ -180,6 +291,13 @@ final class AccountListViewModel {
         return groups.first { $0.id == groupId }?.name
     }
 
+    // MARK: - 提示
+
+    func notice(_ message: String) {
+        noticeMessage = message
+        showNotice = true
+    }
+
     // MARK: - 调度开关
 
     /// 乐观更新：先切 UI，失败再回滚并提示（POST /admin/accounts/:id/schedulable）
@@ -195,9 +313,33 @@ final class AccountListViewModel {
             )
         } catch {
             accounts[index].schedulable = original
-            errorMessage = "设置失败：\(error.localizedDescription)"
-            showError = true
+            noticeMessage = "设置失败：\(error.localizedDescription)"
+            showNotice = true
         }
+    }
+
+    // MARK: - 删除
+
+    /// 发起删除确认
+    func requestDelete(_ account: Account) {
+        pendingDelete = account
+        showDeleteConfirm = true
+    }
+
+    /// 删除待确认账号（DELETE /admin/accounts/:id）
+    func deletePending() async {
+        guard let client, let account = pendingDelete else { return }
+        defer { pendingDelete = nil }
+        do {
+            let _: EmptyData = try await client.request(
+                "DELETE", "/admin/accounts/\(account.id)"
+            )
+            accounts.removeAll { $0.id == account.id }
+            noticeMessage = "账号「\(account.name ?? "#\(account.id)")」已删除。"
+        } catch {
+            noticeMessage = "删除失败：\(error.localizedDescription)"
+        }
+        showNotice = true
     }
 
     // MARK: - 列表加载

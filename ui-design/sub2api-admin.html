@@ -169,7 +169,7 @@ body{
 .seg button.on{color:var(--ink); font-weight:600}
 .seg .pill{position:absolute; top:3px; bottom:3px; border-radius:10px; background:rgba(255,255,255,.13); box-shadow:inset 0 1px 0 rgba(255,255,255,.14), 0 3px 10px rgba(0,0,0,.3); transition:all .3s var(--ease); z-index:0}
 /* iOS 开关 */
-.switch{width:48px; height:29px; border-radius:16px; background:rgba(255,255,255,.12); position:relative; cursor:pointer; transition:background .25s; border:1px solid var(--stroke)}
+.switch{display:inline-block; width:48px; height:29px; border-radius:16px; background:rgba(255,255,255,.12); position:relative; cursor:pointer; transition:background .25s; border:1px solid var(--stroke); vertical-align:middle}
 .switch i{position:absolute; top:2.5px; left:2.5px; width:22px; height:22px; border-radius:50%; background:#fff; box-shadow:0 2px 6px rgba(0,0,0,.4); transition:left .25s var(--ease)}
 .switch.on{background:var(--ok); border-color:transparent; box-shadow:0 0 16px rgba(52,211,153,.3)}
 .switch.on i{left:21.5px}
@@ -201,26 +201,19 @@ body{
 .btn.danger{background:rgba(255,107,107,.14); border-color:rgba(255,107,107,.45); color:var(--err)}
 .btn.small{padding:8px 15px; font-size:12.5px; border-radius:12px}
 
-/* ============ 账号列表 ============ */
+/* ============ 账号列表（信息卡） ============ */
 .acct-card{
-  display:flex; align-items:center; gap:12px; padding:14px 15px; border-radius:var(--r-md); margin-bottom:9px;
-  background:rgba(255,255,255,.045); border:1px solid rgba(255,255,255,.06); transition:all .25s var(--ease); cursor:pointer;
+  padding:15px; border-radius:var(--r-md); margin-bottom:10px;
+  background:rgba(255,255,255,.045); border:1px solid rgba(255,255,255,.06); transition:all .25s var(--ease);
 }
-.acct-card.selected{background:rgba(255,138,61,.10); border-color:rgba(255,138,61,.4)}
-.acct-ico{width:40px; height:40px; border-radius:13px; display:grid; place-items:center; font-family:var(--mono); font-size:11px; font-weight:700; flex-shrink:0; border:1px solid var(--stroke-2)}
-.acct-ico.claude{color:var(--accent-2); background:rgba(255,138,61,.12)}
-.acct-ico.openai{color:var(--ok); background:rgba(52,211,153,.10)}
-.acct-ico.gemini{color:var(--info); background:rgba(108,184,255,.12)}
-.acct-ico.grok{color:var(--warn); background:rgba(251,191,80,.12)}
-.acct-info{flex:1; min-width:0}
-.acct-info .nm{font-size:14.5px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
-.acct-info .meta{font-family:var(--mono); font-size:10px; color:var(--ink-3); margin-top:3px; display:flex; gap:8px; align-items:center}
-.ckb{
-  width:24px; height:24px; border-radius:50%; border:1.5px solid var(--stroke-2); flex-shrink:0;
-  display:grid; place-items:center; transition:.2s; background:rgba(0,0,0,.25);
-}
-.ckb.on{background:var(--accent); border-color:var(--accent); box-shadow:0 0 14px rgba(255,138,61,.4)}
-.ckb.on::after{content:"✓"; font-size:13px; color:#241203; font-weight:800}
+.acct-card .nm{font-size:14.5px; font-weight:600}
+.acct-card .a-id{font-family:var(--mono); font-size:10px; color:var(--ink-3); margin-top:3px}
+.a-tags{display:flex; gap:6px; flex-wrap:wrap; margin-top:9px}
+.tag2{font-family:var(--mono); font-size:9.5px; color:var(--ink-2); border:1px solid var(--stroke-2); background:rgba(0,0,0,.25); padding:2.5px 8px; border-radius:6px}
+.a-kvs{margin-top:11px; border-top:1px dashed rgba(255,255,255,.07); padding-top:4px}
+.a-kvs .kv{padding:5.5px 0}
+.a-acts{display:flex; gap:8px; margin-top:13px; flex-wrap:wrap}
+.a-acts .btn{flex:1; min-width:72px; padding:8.5px 0; font-size:12px}
 
 /* ============ Sheet（玻璃底部弹层） ============ */
 .overlay{position:absolute; inset:0; z-index:70; background:rgba(6,7,12,.45); -webkit-backdrop-filter:blur(3px); backdrop-filter:blur(3px); opacity:0; pointer-events:none; transition:opacity .3s}
@@ -287,7 +280,7 @@ body{
 .kv{display:flex; justify-content:space-between; align-items:baseline; gap:14px; padding:6.5px 0; font-size:13px}
 .kv .k{color:var(--ink-2); font-size:11.5px; flex-shrink:0}
 .kv .v{font-family:var(--mono); font-size:12px; text-align:right; word-break:break-all}
-.kv .v.err{color:var(--err)} .kv .v.ok{color:var(--ok)}
+.kv .v.err{color:var(--err)} .kv .v.ok{color:var(--ok)} .kv .v.warn{color:var(--warn)} .kv .v.mut{color:var(--ink-2)}
 .codeblk{
   font-family:var(--mono); font-size:10.5px; background:rgba(0,0,0,.4); border:1px solid var(--stroke); border-radius:12px;
   padding:13px; color:var(--err); line-height:1.7; word-break:break-all; margin-top:8px;
@@ -306,17 +299,9 @@ body{
 .up-card .meta{font-family:var(--mono); font-size:9px; color:var(--ink-3); margin-top:7px; display:flex; gap:12px}
 
 /* ============ 分组卡片 ============ */
-.grp-card{padding:15px; border-radius:var(--r-md); background:rgba(255,255,255,.045); border:1px solid rgba(255,255,255,.06); margin-bottom:10px; cursor:pointer; transition:all .25s var(--ease)}
-.grp-card:active{transform:scale(.98); background:rgba(255,255,255,.07)}
+.grp-card{padding:15px; border-radius:var(--r-md); background:rgba(255,255,255,.045); border:1px solid rgba(255,255,255,.06); margin-bottom:10px; transition:all .25s var(--ease)}
 .grp-card .hd{display:flex; align-items:center; gap:9px}
 .grp-card .nm{font-size:14.5px; font-weight:600}
-.grp-card .pr{margin-left:auto; font-family:var(--mono); font-size:9px; color:var(--accent-2); border:1px solid rgba(255,138,61,.35); padding:2px 7px; border-radius:5px}
-.grp-card .desc{font-size:11px; color:var(--ink-3); margin-top:5px; line-height:1.5}
-.grp-card .models{display:flex; flex-wrap:wrap; gap:6px; margin-top:10px}
-.grp-card .mchip{font-family:var(--mono); font-size:9.5px; color:var(--info); background:rgba(108,184,255,.10); border:1px solid rgba(108,184,255,.22); padding:3px 8px; border-radius:6px}
-.grp-card .gmeta{display:flex; justify-content:space-between; align-items:center; font-family:var(--mono); font-size:9.5px; color:var(--ink-3); margin-top:11px}
-.grp-card .gdel{background:none; border:none; color:var(--err); font-size:10px; cursor:pointer; padding:4px 6px; border-radius:6px; font-family:var(--font)}
-.grp-card .gdel:active{background:rgba(255,107,107,.12)}
 .d-acts{display:flex; gap:10px; margin:4px 0 20px}
 .d-acts .btn{flex:1}
 
@@ -438,8 +423,9 @@ body{
       </div>
       <div class="search"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg><input id="acct-search" placeholder="搜索账号名称…"></div>
       <div class="chips" id="grp-chips">
-        <span class="chip on" data-g="">全部分组</span><span class="chip" data-g="default">default</span>
-        <span class="chip" data-g="premium">premium</span><span class="chip" data-g="codex">codex</span><span class="chip" data-g="budget">budget</span>
+        <span class="chip on" data-g="">全部分组</span><span class="chip" data-g="Plus">Plus</span>
+        <span class="chip" data-g="Pro">Pro</span><span class="chip" data-g="default">default</span>
+        <span class="chip" data-g="budget">budget</span>
       </div>
       <div class="chips" id="auth-chips" style="padding-bottom:2px">
         <span class="chip on" data-a="">全部认证</span><span class="chip" data-a="oauth">oauth</span><span class="chip" data-a="api_key">api_key</span>
@@ -534,10 +520,23 @@ body{
     <div class="sheet" id="sh-group">
       <div class="grabber"></div>
       <h2 id="g-sh-title">新建分组</h2>
-      <div class="fld"><label>名称</label><input class="finput" id="g-name" placeholder="如 premium"></div>
-      <div class="fld"><label>描述</label><input class="finput" id="g-desc" placeholder="分组用途说明"></div>
-      <div class="fld"><label>模型列表（逗号分隔）</label><input class="finput" id="g-models" placeholder="claude-sonnet-4.5, gpt-5.2-codex" style="font-family:var(--mono)"></div>
-      <div class="fld"><label>优先级（越大越优先）</label><input class="finput" id="g-pri" type="number" value="0"></div>
+      <div class="fld"><label>名称</label><input class="finput" id="g-name" placeholder="如 Plus"></div>
+      <div class="fld"><label>平台</label>
+        <select class="finput" id="g-platform">
+          <option>OpenAI</option><option>Claude</option><option>Gemini</option><option>Grok</option>
+        </select>
+      </div>
+      <div class="fld"><label>计费类型</label>
+        <select class="finput" id="g-billing">
+          <option>标准（余额）</option><option>标准（订阅）</option><option>按量计费</option>
+        </select>
+      </div>
+      <div class="fld"><label>费率倍数（如 0.1）</label><input class="finput" id="g-rate" type="number" step="0.001" value="0.1" style="font-family:var(--mono)"></div>
+      <div class="fld"><label>类型</label>
+        <select class="finput" id="g-type">
+          <option>公开</option><option>私有</option>
+        </select>
+      </div>
       <div class="sheet-acts" style="margin-top:24px">
         <button class="link" id="g-cancel">取消</button>
         <button class="btn primary" id="g-save" style="min-width:110px">保存</button>
@@ -565,14 +564,21 @@ const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 const PLATS=['claude','openai','gemini','grok'];
 const accounts=Array.from({length:26},(_,i)=>{
   const plat=PLATS[i%4];
-  const r=Math.random(), status=r<.62?'active':r<.78?'error':r<.9?'rate_limited':'expired';
+  const r=Math.random(), status=r<.62?'正常':r<.78?'异常':r<.9?'限流':'过期';
   return {
-    id:1001+i, name:`${plat}-pool-${String(i+1).padStart(2,'0')}`, plat,
-    status, tier:['free','pro','max5','max20'][i%4],
-    group:['default','premium','codex','budget'][i%4],
-    auth:i%3===0?'api_key':'oauth',
-    req:Math.floor(Math.random()*900), sched:status==='expired'?false:Math.random()>.15,
-    last:`${1+Math.floor(Math.random()*40)}m`
+    id:5460+i, name:`${plat}-pool-${String(i+1).padStart(2,'0')}`, plat,
+    status, auth:i%3===0?'api_key':'oauth',
+    tags:i%2?['Compact','Auto']:['Auto'],
+    group:['Plus','Pro','default','budget'][i%4],
+    gnote:i%4===0?'对接plus':null,
+    cap:[Math.floor(Math.random()*40),1000],
+    win:{req:`${(Math.random()*40).toFixed(1)}K`,tok:`${(Math.random()*8).toFixed(1)}B`,
+         A:`$${(Math.random()*4000).toFixed(2)}`,U:`$${(Math.random()*400).toFixed(2)}`},
+    rate:['0.065','0.100','0.080','0.200'][i%4],
+    last:i<3?'刚刚':`${1+Math.floor(Math.random()*40)}m 前`,
+    created:`2026/08/${String(1+i%28).padStart(2,'0')} ${String(9+i%12).padStart(2,'0')}:${String(i%60).padStart(2,'0')}:20`,
+    expires:i%5===0?'2027/01/01 00:00:00':'-',
+    sched:status==='过期'?false:Math.random()>.15
   };
 });
 const MODELS=['claude-sonnet-4.5','claude-opus-4.1','claude-haiku-4.5','gpt-5.2-codex','gemini-3-pro','grok-4'];
@@ -766,8 +772,9 @@ function openUserPush(u){
   };
 }
 
-/* ============ 账号管理（简化：筛选 + 信息展示 + 调度开关） ============ */
+/* ============ 账号管理（筛选 + 信息卡展示 + 调度开关） ============ */
 let grpF='',authF='',kw='';
+const ST_CLS={'正常':'ok','异常':'err','限流':'warn','过期':'mut'};
 function acctRows(){
   return accounts.filter(a=>(!grpF||a.group===grpF)&&(!authF||a.auth===authF)&&(!kw||a.name.includes(kw)));
 }
@@ -775,16 +782,26 @@ function renderAcct(){
   const rows=acctRows();
   $('#acct-list').innerHTML=rows.map(a=>`
     <div class="acct-card" data-id="${a.id}">
-      <span class="acct-ico ${a.plat}">${a.plat.slice(0,2).toUpperCase()}</span>
-      <div class="acct-info">
-        <div class="nm">${a.name}</div>
-        <div class="meta">
-          <span class="pill ${a.status==='active'?'ok':a.status==='error'?'err':a.status==='rate_limited'?'warn':'mut'}">${a.status}</span>
-          <span class="pill info">${a.group}</span>
-          <span>${a.auth} · ${a.req}req</span>
-        </div>
+      <div class="nm">${a.name}</div>
+      <div class="a-id">#${a.id} · ${a.plat} ${a.auth==='api_key'?'Key':'OAuth'}</div>
+      <div class="a-tags">${a.tags.map(t=>`<span class="tag2">${t}</span>`).join('')}</div>
+      <div class="a-kvs">
+        <div class="kv"><span class="k">容量</span><span class="v">${a.cap[0]} / ${a.cap[1]}</span></div>
+        <div class="kv"><span class="k">状态</span><span class="v ${ST_CLS[a.status]||'mut'}">${a.status}</span></div>
+        <div class="kv"><span class="k">调度</span><span class="v"><span class="switch ${a.sched?'on':''}" data-sw="${a.id}"><i></i></span></span></div>
+        <div class="kv"><span class="k">分组</span><span class="v">${a.group}${a.gnote?` · ${a.gnote}`:''}</span></div>
+        <div class="kv"><span class="k">用量窗口</span><span class="v">${a.win.req} req · ${a.win.tok}</span></div>
+        <div class="kv"><span class="k"></span><span class="v">A ${a.win.A} · U ${a.win.U}</span></div>
+        <div class="kv"><span class="k">上游声明倍率</span><span class="v">${a.rate}x</span></div>
+        <div class="kv"><span class="k">最近使用</span><span class="v">${a.last}</span></div>
+        <div class="kv"><span class="k">创建时间</span><span class="v">${a.created}</span></div>
+        <div class="kv"><span class="k">过期时间</span><span class="v">${a.expires}</span></div>
       </div>
-      <span class="switch ${a.sched?'on':''}" data-sw="${a.id}"><i></i></span>
+      <div class="a-acts">
+        <button class="btn small" data-aact="edit" data-id="${a.id}">编辑</button>
+        <button class="btn small danger" data-aact="del" data-id="${a.id}">删除</button>
+        <button class="btn small" data-aact="more" data-id="${a.id}">更多</button>
+      </div>
     </div>`).join('');
   $('#acct-empty').style.display=rows.length?'none':'block';
   const anyF=grpF||authF;
@@ -793,7 +810,11 @@ function renderAcct(){
 $('#acct-list').onclick=e=>{
   const sw=e.target.closest('[data-sw]');
   if(sw){const a=accounts.find(x=>x.id===+sw.dataset.sw); if(!a)return;
-    a.sched=!a.sched; sw.classList.toggle('on'); toast(`${a.name} 调度已${a.sched?'开启':'关闭'}`);}
+    a.sched=!a.sched; sw.classList.toggle('on'); toast(`${a.name} 调度已${a.sched?'开启':'关闭'}`); return;}
+  const b=e.target.closest('[data-aact]');
+  if(b){const a=accounts.find(x=>x.id===+b.dataset.id); if(!a)return;
+    const map={edit:`编辑账号「${a.name}」`,del:`删除账号「${a.name}」`,more:`账号「${a.name}」更多操作`};
+    toast(map[b.dataset.aact], b.dataset.aact==='del'?'err':'ok');}
 };
 $$('#grp-chips .chip').forEach(c=>c.onclick=()=>{
   $$('#grp-chips .chip').forEach(x=>x.classList.remove('on')); c.classList.add('on');
@@ -895,10 +916,14 @@ $('#log-tabs').addEventListener('segchange',e=>{
 
 /* ============ 分组管理 ============ */
 const groups=[
-  {id:1,name:'default',desc:'默认分组 · 全平台兜底',models:['claude-sonnet-4.5','gpt-5.2-codex','gemini-3-pro'],priority:0,acct:8},
-  {id:2,name:'premium',desc:'高优先级 Opus 池 · 大账户专用',models:['claude-opus-4.1'],priority:100,acct:4},
-  {id:3,name:'codex',desc:'Codex 专用路由池',models:['gpt-5.2-codex'],priority:50,acct:6},
-  {id:4,name:'budget',desc:'低成本兜底 · 轻量任务',models:['claude-haiku-4.5','grok-4'],priority:10,acct:8},
+  {id:1,name:'Plus',platform:'OpenAI',billing:'标准（余额）',rate:0.1,type:'公开',avail:3,total:3,cap:[16,1200],
+   today:'29.00',yesterday:'36.89',sum:'53491',status:'正常'},
+  {id:2,name:'Pro',platform:'Claude',billing:'标准（订阅）',rate:0.08,type:'公开',avail:5,total:6,cap:[42,1200],
+   today:'118.40',yesterday:'96.20',sum:'120438',status:'正常'},
+  {id:3,name:'default',platform:'OpenAI',billing:'按量计费',rate:0.2,type:'公开',avail:7,total:8,cap:[60,1200],
+   today:'54.10',yesterday:'48.75',sum:'88021',status:'正常'},
+  {id:4,name:'budget',platform:'Grok',billing:'按量计费',rate:0.15,type:'私有',avail:2,total:4,cap:[9,600],
+   today:'6.30',yesterday:'8.90',sum:'9410',status:'容量低'},
 ];
 let gEditing=null; // null=新建，否则为编辑中的分组
 function renderGroups(){
@@ -910,41 +935,58 @@ function renderGroups(){
     </div>
     ${groups.map(g=>`
     <div class="grp-card" data-g="${g.id}">
-      <div class="hd"><span class="nm">${g.name}</span><span class="pr">P${g.priority}</span></div>
-      <div class="desc">${g.desc||'-'}</div>
-      <div class="models">${g.models.map(m=>`<span class="mchip">${m}</span>`).join('')}</div>
-      <div class="gmeta"><span>${g.acct} 个账号</span><span>#${g.id}</span><button class="gdel" data-gdel="${g.id}">删除</button></div>
+      <div class="hd"><span class="nm">${g.name}</span>
+        <span class="pill ${g.status==='正常'?'ok':'warn'}" style="margin-left:auto">${g.status}</span></div>
+      <div class="a-kvs">
+        <div class="kv"><span class="k">平台</span><span class="v">${g.platform}</span></div>
+        <div class="kv"><span class="k">计费类型</span><span class="v">${g.billing}</span></div>
+        <div class="kv"><span class="k">费率倍数</span><span class="v">${g.rate}x</span></div>
+        <div class="kv"><span class="k">类型</span><span class="v">${g.type}</span></div>
+        <div class="kv"><span class="k">账号数</span><span class="v">可用:${g.avail}个账号 · 总量:${g.total}个账号</span></div>
+        <div class="kv"><span class="k">容量</span><span class="v">${g.cap[0]} / ${g.cap[1]}</span></div>
+        <div class="kv"><span class="k">用量</span><span class="v">今日$${g.today} · 昨日$${g.yesterday}</span></div>
+        <div class="kv"><span class="k"></span><span class="v">累计$${g.sum}</span></div>
+      </div>
+      <div class="a-acts">
+        <button class="btn small" data-gact="edit" data-id="${g.id}">编辑</button>
+        <button class="btn small" data-gact="copy" data-id="${g.id}">复制</button>
+        <button class="btn small" data-gact="rate" data-id="${g.id}">专属倍率</button>
+        <button class="btn small" data-gact="rpm" data-id="${g.id}">专属 RPM</button>
+      </div>
     </div>`).join('')}`;
   $('#g-new').onclick=()=>openGroupSheet(null);
-  $$('.grp-card').forEach(c=>{
-    c.onclick=e=>{
-      if(e.target.closest('.gdel'))return;
-      openGroupSheet(groups.find(g=>g.id===+c.dataset.g));
-    };
-  });
-  $$('[data-gdel]').forEach(b=>b.onclick=e=>{
+  $$('[data-gact]').forEach(b=>b.onclick=e=>{
     e.stopPropagation();
-    const id=+b.dataset.gdel, g=groups.find(x=>x.id===id);
-    groups.splice(groups.indexOf(g),1); renderGroups();
-    toast(`分组「${g.name}」已删除`,'err');
+    const g=groups.find(x=>x.id===+b.dataset.id); if(!g)return;
+    const map={
+      edit:null, // 编辑走弹层
+      copy:`已复制分组「${g.name}」的配置`,
+      rate:`分组「${g.name}」专属倍率设置`,
+      rpm:`分组「${g.name}」专属 RPM 设置`,
+    };
+    if(b.dataset.gact==='edit'){openGroupSheet(g); return;}
+    toast(map[b.dataset.gact]);
   });
 }
 function openGroupSheet(g){
   gEditing=g;
   $('#g-sh-title').textContent=g?'编辑分组':'新建分组';
   $('#g-name').value=g?.name||'';
-  $('#g-desc').value=g?.desc||'';
-  $('#g-models').value=(g?.models||[]).join(', ');
-  $('#g-pri').value=g?.priority??0;
+  $('#g-platform').value=g?.platform||'OpenAI';
+  $('#g-billing').value=g?.billing||'标准（余额）';
+  $('#g-rate').value=g?.rate??0.1;
+  $('#g-type').value=g?.type||'公开';
   $('#ov').classList.add('show'); $('#sh-group').classList.add('show');
 }
 $('#g-cancel').onclick=closeSheets;
 $('#g-save').onclick=()=>{
-  const name=$('#g-name').value.trim(), models=$('#g-models').value.split(',').map(s=>s.trim()).filter(Boolean);
+  const name=$('#g-name').value.trim();
   if(!name){toast('名称不能为空','err'); return;}
-  const data={name,desc:$('#g-desc').value.trim(),models,priority:+$('#g-pri').value||0};
+  const data={name,platform:$('#g-platform').value,billing:$('#g-billing').value,
+    rate:+$('#g-rate').value||0.1,type:$('#g-type').value};
   if(gEditing){Object.assign(gEditing,data); toast(`分组「${name}」已更新`);}
-  else{groups.unshift({id:Math.max(0,...groups.map(g=>g.id))+1,acct:0,...data}); toast(`分组「${name}」已创建`);}
+  else{groups.unshift({id:Math.max(0,...groups.map(g=>g.id))+1,avail:0,total:0,cap:[0,0],
+    today:'0.00',yesterday:'0.00',sum:'0',status:'正常',...data}); toast(`分组「${name}」已创建`);}
   closeSheets(); renderGroups();
 };
 $('#btn-groups').onclick=()=>{
