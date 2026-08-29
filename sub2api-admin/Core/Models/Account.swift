@@ -1,54 +1,50 @@
 import Foundation
 
 /// 上游账号（账号管理）模型
+/// 契约对照 sub2api `backend/internal/handler/dto/types.go` 的 dto.Account，
+/// 列表响应为 AccountWithConcurrency（在 dto.Account 基础上附加实时并发/窗口字段），
+/// 全字段宽松 Optional 解码。
 struct Account: Decodable, Identifiable, Hashable {
     let id: Int
     let name: String?
-    let platform: String?      // claude / openai / gemini / antigravity / grok / ...
-    let authType: String?      // oauth / api_key / ...
-    let tier: String?          // free / pro / max5 / max20 ...
-    let status: String?        // active / error / rate_limited / expired ...
+    let notes: String?                  // 备注（如「对接plus」）
+    let platform: String?               // anthropic / openai / gemini / antigravity / grok / ...
+    let type: String?                   // oauth / apikey / setup-token / upstream / bedrock / service_account
+    let status: String?                 // active / inactive / error / rate_limited / ...
     var schedulable: Bool?
     let priority: Int?
-    let weight: Int?
+    let rateMultiplier: Double?         // 上游声明倍率
+    let concurrency: Int?               // 并发容量上限
+    let currentConcurrency: Int?        // 实时并发（列表附加字段 current_concurrency）
+    let currentWindowCost: Double?      // 当前 5h 窗口费用（列表附加字段）
+    let quotaLimit: Double?             // API Key 账号配额上限（USD）
+    let quotaUsed: Double?              // API Key 账号配额已用（USD）
     let proxyId: Int?
-    let groupId: Int?
-    let clientId: String?
-    let email: String?
+    let groupIds: [Int]?
+    let groups: [AccountGroupRef]?      // 嵌套分组（含 name）
     let lastUsedAt: String?
     let createdAt: String?
+    let expiresAt: Int?                 // Unix 秒；nil = 永不过期
     let errorMessage: String?
 
-    // 信息卡展示字段（服务端聚合）
-    let capacityUsed: Int?            // 容量已用
-    let capacityLimit: Int?           // 容量上限
-    let tags: [String]?               // 标签（Compact / Auto ...）
-    let groupNote: String?            // 分组备注（如 对接plus）
-    let rateMultiplier: Double?       // 上游声明倍率
-    let windowRequests: String?       // 用量窗口请求数（如 26.5K）
-    let windowTokens: String?         // 用量窗口 Token（如 3.0B）
-    let windowAmount: Double?         // A：账号侧费用
-    let windowUserAmount: Double?     // U：用户侧费用
-    let expiredAt: String?            // 过期时间（- 表示未设置）
-
     enum CodingKeys: String, CodingKey {
-        case id, name, platform, status, priority, weight, email, tier, tags
-        case authType = "auth_type"
-        case schedulable
+        case id, name, notes, platform, type, status, schedulable, priority, groups
+        case rateMultiplier = "rate_multiplier"
+        case concurrency, groupIds = "group_ids"
+        case currentConcurrency = "current_concurrency"
+        case currentWindowCost = "current_window_cost"
+        case quotaLimit = "quota_limit"
+        case quotaUsed = "quota_used"
         case proxyId = "proxy_id"
-        case groupId = "group_id"
-        case clientId = "client_id"
         case lastUsedAt = "last_used_at"
         case createdAt = "created_at"
+        case expiresAt = "expires_at"
         case errorMessage = "error_message"
-        case capacityUsed = "capacity_used"
-        case capacityLimit = "capacity_limit"
-        case groupNote = "group_note"
-        case rateMultiplier = "rate_multiplier"
-        case windowRequests = "window_requests"
-        case windowTokens = "window_tokens"
-        case windowAmount = "window_amount"
-        case windowUserAmount = "window_user_amount"
-        case expiredAt = "expired_at"
     }
+}
+
+/// 账号响应内嵌的分组对象（dto.Group 的宽松子集，仅取展示所需字段）
+struct AccountGroupRef: Decodable, Hashable {
+    let id: Int
+    let name: String?
 }

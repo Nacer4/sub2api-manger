@@ -19,7 +19,6 @@ struct AccountListView: View {
                 ForEach(viewModel.accounts) { account in
                     AccountRow(
                         account: account,
-                        groupName: viewModel.groupName(for: account),
                         onToggleSchedulable: { newValue in
                             Task { await viewModel.setSchedulable(account, value: newValue) }
                         },
@@ -83,25 +82,27 @@ struct AccountListView: View {
         }
     }
 
+    /// 筛选：分组（group=分组名，契约同 BulkUpdateAccountFilters）+ 认证方式（type）
     private var filterSection: some View {
         Section {
             Picker("分组", selection: $viewModel.groupFilter) {
-                Text("全部分组").tag(Int?.none)
+                Text("全部分组").tag("")
                 ForEach(viewModel.groups) { group in
-                    Text(group.name ?? "#\(group.id)").tag(Int?.some(group.id))
+                    Text(group.name ?? "#\(group.id)")
+                        .tag(group.name ?? "#\(group.id)")
                 }
             }
             .onChange(of: viewModel.groupFilter) { _, _ in
                 Task { await viewModel.reload() }
             }
 
-            Picker("认证方式", selection: $viewModel.authFilter) {
+            Picker("认证方式", selection: $viewModel.typeFilter) {
                 Text("全部认证").tag("")
-                ForEach(viewModel.authTypes, id: \.self) { auth in
-                    Text(auth).tag(auth)
+                ForEach(viewModel.typeOptions, id: \.self) { type in
+                    Text(type).tag(type)
                 }
             }
-            .onChange(of: viewModel.authFilter) { _, _ in
+            .onChange(of: viewModel.typeFilter) { _, _ in
                 Task { await viewModel.reload() }
             }
         }
@@ -112,7 +113,6 @@ struct AccountListView: View {
 
 struct AccountRow: View {
     let account: Account
-    let groupName: String?
     let onToggleSchedulable: (Bool) -> Void
     let onEdit: () -> Void
     let onDelete: () -> Void
@@ -122,17 +122,10 @@ struct AccountRow: View {
         VStack(alignment: .leading, spacing: 10) {
             header
 
-            if let tags = account.tags, !tags.isEmpty {
-                HStack(spacing: 6) {
-                    ForEach(tags, id: \.self) { tag in
-                        Text(tag)
-                            .font(.caption2.monospaced())
-                            .foregroundStyle(.secondary)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 3)
-                            .background(.fill.tertiary, in: Capsule())
-                    }
-                }
+            if let notes = account.notes, !notes.isEmpty {
+                Text(notes)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             VStack(spacing: 0) {
@@ -141,11 +134,10 @@ struct AccountRow: View {
                 schedRow
                 LabeledRow("分组", groupText)
                 LabeledRow("用量窗口", windowText)
-                LabeledRow("", amountText)
                 LabeledRow("上游声明倍率", rateText)
                 LabeledRow("最近使用", Fmt.date(account.lastUsedAt))
                 LabeledRow("创建时间", Fmt.date(account.createdAt))
-                LabeledRow("过期时间", Fmt.date(account.expiredAt))
+                LabeledRow("过期时间", expiresText)
             }
 
             actionsRow
@@ -157,52 +149,56 @@ struct AccountRow: View {
         VStack(alignment: .leading, spacing: 3) {
             Text(account.name ?? "账号 #\(account.id)")
                 .font(.subheadline.weight(.semibold))
-            Text("#\(account.id) · \(account.platform ?? "-") \(authLabel)")
+            Text("#\(account.id) · \(account.platform ?? "-") \(typeLabel)")
                 .font(.caption.monospaced())
                 .foregroundStyle(.tertiary)
         }
     }
 
-    private var authLabel: String {
-        account.authType == "api_key" ? "Key" : (account.authType ?? "-")
+    /// oauth → OAuth，apikey → Key，其余原样展示
+    private var typeLabel: String {
+        switch account.type {
+        case "oauth": return "OAuth"
+        case "apikey": return "Key"
+        default: return account.type ?? "-"
+        }
     }
 
     private var capacityText: String? {
-        if let used = account.capacityUsed, let limit = account.capacityLimit {
-            return "\(used) / \(limit)"
+        if let current = account.currentConcurrency, let max = account.concurrency {
+            return "\(current) / \(max)"
         }
-        return account.capacityLimit.map { "- / \($0)" }
+        return account.concurrency.map { "- / \($0)" }
     }
 
     private var groupText: String? {
-        switch (groupName, account.groupNote) {
-        case let (name?, note?): return "\(name) · \(note)"
-        case let (name?, nil): return name
-        case let (nil, note?): return note
-        default: return nil
-        }
+        guard let names = account.groups?.compactMap(\.name), !names.isEmpty else { return nil }
+        return names.joined(separator: " · ")
     }
 
+    /// 当前 5h 窗口费用 + 配额（A 账号侧 / U 配额）
     private var windowText: String? {
-        switch (account.windowRequests, account.windowTokens) {
-        case let (req?, tok?): return "\(req) req · \(tok)"
-        case let (req?, nil): return "\(req) req"
-        case let (nil, tok?): return tok
-        default: return nil
+        var parts: [String] = []
+        if let cost = account.currentWindowCost {
+            parts.append("A \(Fmt.usd(cost))")
         }
-    }
-
-    private var amountText: String? {
-        switch (account.windowAmount, account.windowUserAmount) {
-        case let (a?, u?): return "A \(Fmt.usd(a)) · U \(Fmt.usd(u))"
-        case let (a?, nil): return "A \(Fmt.usd(a))"
-        case let (nil, u?): return "U \(Fmt.usd(u))"
-        default: return nil
+        if let used = account.quotaUsed {
+            let limit = account.quotaLimit.map { "/\(Fmt.usd($0))" } ?? ""
+            parts.append("U \(Fmt.usd(used))\(limit)")
         }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
     private var rateText: String? {
         account.rateMultiplier.map { "\($0)x" }
+    }
+
+    private var expiresText: String? {
+        guard let ts = account.expiresAt, ts > 0 else { return "-" }
+        return Date(timeIntervalSince1970: TimeInterval(ts))
+            .formatted(.verbatim(year: .defaultDigits, month: .twoDigits, day: .twoDigits,
+                                 hour: .twoDigits, minute: .twoDigits, second: .twoDigits,
+                                 timeZoneName: .localizedGMT))
     }
 
     private var schedRow: some View {
@@ -263,9 +259,10 @@ final class AccountListViewModel {
     var error: Error?
 
     var searchText = ""
-    var groupFilter: Int?
-    var authFilter = ""
+    var groupFilter = ""
+    var typeFilter = ""
 
+    /// 分组选项（GET /admin/groups，取名称用于筛选）
     var groups: [AccountGroup] = []
 
     var showNotice = false
@@ -274,8 +271,8 @@ final class AccountListViewModel {
     var pendingDelete: Account?
     var showDeleteConfirm = false
 
-    /// 认证方式
-    let authTypes = ["oauth", "api_key"]
+    /// 认证方式（契约值：type，oauth / apikey）
+    let typeOptions = ["oauth", "apikey"]
 
     private var query = PageQuery()
     private var reachedEnd = false
@@ -283,13 +280,6 @@ final class AccountListViewModel {
     private var loadedOnce = false
 
     private var client: APIClient? { AppStateHolder.shared.client }
-
-    // MARK: - 分组名称
-
-    func groupName(for account: Account) -> String? {
-        guard let groupId = account.groupId else { return nil }
-        return groups.first { $0.id == groupId }?.name
-    }
 
     // MARK: - 提示
 
@@ -300,7 +290,8 @@ final class AccountListViewModel {
 
     // MARK: - 调度开关
 
-    /// 乐观更新：先切 UI，失败再回滚并提示（POST /admin/accounts/:id/schedulable）
+    /// 乐观更新：先切 UI，失败再回滚并提示
+    /// 契约：PUT /admin/accounts/:id，body {schedulable}（UpdateAccountRequest.Schedulable *bool）
     func setSchedulable(_ account: Account, value: Bool) async {
         guard let client else { return }
         guard let index = accounts.firstIndex(where: { $0.id == account.id }) else { return }
@@ -309,7 +300,7 @@ final class AccountListViewModel {
         do {
             struct Body: Encodable { let schedulable: Bool }
             let _: EmptyData = try await client.request(
-                "POST", "/admin/accounts/\(account.id)/schedulable", body: Body(schedulable: value)
+                "PUT", "/admin/accounts/\(account.id)", body: Body(schedulable: value)
             )
         } catch {
             accounts[index].schedulable = original
@@ -368,6 +359,7 @@ final class AccountListViewModel {
         if !ok { query.page -= 1 }
     }
 
+    /// 筛选参数对照账号列表过滤契约：search / type / status / group / platform
     @discardableResult
     private func loadPage() async -> Bool {
         guard let client else { return false }
@@ -375,8 +367,8 @@ final class AccountListViewModel {
         defer { isLoading = false }
 
         var extra: [String: String] = [:]
-        if let groupFilter { extra["group_id"] = String(groupFilter) }
-        if !authFilter.isEmpty { extra["auth_type"] = authFilter }
+        if !groupFilter.isEmpty { extra["group"] = groupFilter }
+        if !typeFilter.isEmpty { extra["type"] = typeFilter }
         if !searchText.isEmpty { extra["search"] = searchText }
         query.extra = extra
 
@@ -400,7 +392,7 @@ final class AccountListViewModel {
             )
             groups = page.items
         } catch {
-            // 分组加载失败不阻塞账号列表，仅无法显示分组名
+            // 分组加载失败不阻塞账号列表，仅筛选器少选项
         }
     }
 
